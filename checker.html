@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Checker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      color: #333;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+      padding: 20px 0 80px; 
+      transition: background 0.6s ease;
+    }
+
+    .open-market {
+      background: #00ff00; 
+    }
+
+    .closed-market {
+      background: #ff0000; 
+    }
+
+    .stock-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .label {
+      background: #0074d9;
+      color: #fff;
+      font-weight: bold;
+      border-radius: 50%;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+    }
+
+    .stock-card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      padding: 15px 20px;
+      width: 250px;
+      transition: all 0.3s ease;
+    }
+
+    .stock-card:hover {
+      transform: translateY(-3px);
+    }
+
+    .symbol {
+      font-size: 1.4em;
+      font-weight: bold;
+      color: #0074d9;
+      margin-bottom: 8px;
+    }
+
+    .value {
+      font-weight: bold;
+      font-size: 1.2em;
+    }
+
+    .green { color: #009900; }
+    .red { color: #cc0000; }
+
+    .small {
+      font-size: 0.9em;
+      color: #555;
+    }
+
+    .history {
+      margin-top: 8px;
+      border-top: 1px solid #eee;
+      padding-top: 6px;
+      font-size: 0.85em;
+      color: #444;
+    }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Fixed Footer Bar */
+    .footer-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: #0074d9;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 10px 0;
+      font-size: 1em;
+      font-weight: bold;
+      gap: 40px;
+      box-shadow: 0 -2px 6px rgba(0,0,0,0.2);
+    }
+
+    .footer-item span {
+      display: inline-block;
+      margin-left: 5px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Stock Divs with Labels -->
+  <div class="stock-wrapper">
+    <div class="label">N1K1</div>
+    <div id="BCTL" class="stock-card"></div>
+  </div>
+  <div class="stock-wrapper">
+    <div class="label">N2</div>
+    <div id="BUNGAL" class="stock-card"></div>
+  </div>
+  <div class="stock-wrapper">
+    <div class="label">M1</div>
+    <div id="MABEL" class="stock-card"></div>
+  </div>
+  <div class="stock-wrapper">
+    <div class="label">K2</div>
+    <div id="SDL" class="stock-card"></div>
+  </div>
+  
+
+  <!-- Footer for NEPSE Summary -->
+  <div id="footerBar" class="footer-bar">
+    <div class="footer-item">NEPSE: <span id="nepseValue">--</span></div>
+    <div class="footer-item">Change: <span id="nepseChange">--</span></div>
+    <div class="footer-item">Turnover: <span id="turnoverValue">--</span></div>
+  </div>
+
+  <script>
+    const LIVE_API = "https://sharehubnepal.com/live/api/v2/nepselive/live-nepse";
+    const HISTORY_API = "https://sharehubnepal.com/data/api/v1/price-history";
+    const HOME_API = "https://sharehubnepal.com/live/api/v2/nepselive/home-page-data";
+    const STOCKS = ["BCTL", "BUNGAL", "MABEL", "SDL"];
+
+    // Fetch up to 20 recent days (2 pages of 10)
+    async function fetchVolumeHistory(symbol) {
+      try {
+        const allData = [];
+        for (let page = 1; page <= 2; page++) {
+          const url = `${HISTORY_API}?symbol=${symbol}&page=${page}&pageSize=10`;
+          const res = await fetch(url);
+          const json = await res.json();
+
+          if (json.success && json.data && json.data.content) {
+            allData.push(...json.data.content);
+          } else break;
+
+          if (json.data.content.length < 10) break;
+        }
+
+        return allData.slice(0, 20).map(d => ({
+          date: d.date,
+          volume: d.volume
+        }));
+      } catch (err) {
+        console.error(`Error fetching 20-day history for ${symbol}:`, err);
+        return [];
+      }
+    }
+
+    // Fetch Market Status & NEPSE Data
+    async function fetchMarketStatus() {
+      try {
+        const res = await fetch(HOME_API);
+        const json = await res.json();
+        if (!json.marketStatus || !json.indices) return;
+
+        // Background color based on market status
+        const isOpen = json.marketStatus.status === "OPEN";
+        document.body.classList.toggle("open-market", isOpen);
+        document.body.classList.toggle("closed-market", !isOpen);
+
+        // Find NEPSE index
+        const nepse = json.indices.find(i => i.symbol === "NEPSE");
+        const turnover = json.marketSummary.find(m => m.name.includes("Turnover"));
+
+        if (nepse) {
+          const colorClass = nepse.change > 0 ? "green" : nepse.change < 0 ? "red" : "";
+          const sign = nepse.change > 0 ? "+" : "";
+          document.getElementById("nepseValue").textContent = `${nepse.currentValue.toFixed(2)}`;
+          document.getElementById("nepseChange").innerHTML = `<span class="${colorClass}">${sign}${nepse.change.toFixed(2)} (${nepse.changePercent.toFixed(2)}%)</span>`;
+        }
+       if (turnover) {
+  document.getElementById("turnoverValue").textContent = `Rs ${formatCompactNumber(turnover.value)}`;
+}
+
+      } catch (err) {
+        console.error("Error fetching market status:", err);
+      }
+    }
+
+    async function fetchLiveData() {
+      try {
+        const res = await fetch(LIVE_API);
+        const json = await res.json();
+        if (!json.success || !json.data) return;
+
+        for (const symbol of STOCKS) {
+          const card = document.getElementById(symbol);
+          const stock = json.data.find(s => s.symbol.toUpperCase() === symbol);
+
+          if (stock) {
+            const isUp = stock.change > 0;
+            const colorClass = isUp ? "green" : (stock.change < 0 ? "red" : "");
+            const changeSign = isUp ? "+" : "";
+
+            const history = await fetchVolumeHistory(symbol);
+            const count = history.length;
+
+            let historyHTML = "";
+            history.forEach(item => {
+              historyHTML += `
+                <div class="history-item">
+                  <span>${item.date}</span>
+               <span>${formatCompactNumber(item.volume)}</span>
+                </div>`;
+            });
+
+            card.innerHTML = `
+              <div class="symbol">${stock.symbol}</div>
+              <div>LTP: <span class="value ${colorClass}">${stock.lastTradedPrice}</span></div>
+              <div>Change: <span class="${colorClass}">${changeSign}${stock.change} (${stock.percentageChange.toFixed(2)}%)</span></div>
+              <div class="small">Open: ${stock.openPrice}</div>
+              <div class="small">High: ${stock.highPrice}</div>
+              <div class="small">Low: ${stock.lowPrice}</div>
+              <div class="small">Volume: ${stock.totalTradeQuantity}</div>
+              <div class="history">
+                <b>Last ${count} Days Volume:</b>
+                ${historyHTML}
+              </div>
+            `;
+          } else {
+            card.innerHTML = `<div class="symbol">${symbol}</div><div>Not Traded Yet</div>`;
+          }
+        }
+      } catch (err) {
+        console.error("Fetch error:", err);
+      }
+    }
+
+    async function init() {
+      await fetchMarketStatus();
+      await fetchLiveData();
+    }
+
+   
+	function formatCompactNumber(num) {
+  if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + "B";
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + "M";
+  if (num >= 1_000) return (num / 1_000).toFixed(2) + "K";
+  return num;
+}
+
+//calls
+init();
+setInterval(init, 1000);
+  </script>
+</body>
+</html>
