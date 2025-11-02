@@ -12,17 +12,12 @@
       flex-wrap: wrap;
       justify-content: center;
       gap: 15px;
-      padding: 20px 0 80px; 
+      padding: 20px 0 120px;
       transition: background 0.6s ease;
     }
 
-    .open-market {
-      background: #00ff00; 
-    }
-
-    .closed-market {
-      background: #ff0000; 
-    }
+    .open-market { background: #00ff00; }
+    .closed-market { background: #ff0000; }
 
     .stock-wrapper {
       display: flex;
@@ -53,9 +48,7 @@
       transition: all 0.3s ease;
     }
 
-    .stock-card:hover {
-      transform: translateY(-3px);
-    }
+    .stock-card:hover { transform: translateY(-3px); }
 
     .symbol {
       font-size: 1.4em;
@@ -64,18 +57,11 @@
       margin-bottom: 8px;
     }
 
-    .value {
-      font-weight: bold;
-      font-size: 1.2em;
-    }
+    .value { font-weight: bold; font-size: 1.2em; }
 
-    .green { color: #009900; }
-    .red { color: #cc0000; }
-
-    .small {
-      font-size: 0.9em;
-      color: #555;
-    }
+    .green { color: #009900; -webkit-text-stroke: 1px white; }
+    .red { color: #cc0000; -webkit-text-stroke: 1px white; }
+    .small { font-size: 0.9em; color: #555; }
 
     .history {
       margin-top: 8px;
@@ -88,6 +74,62 @@
     .history-item {
       display: flex;
       justify-content: space-between;
+    }
+
+    /* Top Gainers Section */
+    #topGainer {
+      width: 100%;
+      max-width: 1000px;
+      background: #f7f9fc;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      padding: 15px 20px;
+      margin-top: 25px;
+      font-size: 0.95em;
+    }
+
+    #topGainer h3 {
+      color: #0074d9;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .gainer-list {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+    }
+
+    .gainer-item {
+      background: #fff;
+      border-radius: 8px;
+      padding: 10px 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      width: 150px;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+
+    .gainer-item:hover {
+      transform: translateY(-3px);
+    }
+
+    .gainer-symbol {
+      font-weight: bold;
+      color: #0074d9;
+      font-size: 1.05em;
+    }
+
+    .gainer-change {
+      color: #009900;
+      font-weight: bold;
+      display: block;
+    }
+
+    .gainer-ltp {
+      font-size: 0.9em;
+      color: #333;
     }
 
     /* Fixed Footer Bar */
@@ -132,7 +174,12 @@
     <div class="label">K2</div>
     <div id="SDL" class="stock-card"></div>
   </div>
-  
+
+  <!-- Top Gainers Section -->
+  <div id="topGainer">
+    <h3>Top Gainers</h3>
+    <div class="gainer-list" id="gainerList"></div>
+  </div>
 
   <!-- Footer for NEPSE Summary -->
   <div id="footerBar" class="footer-bar">
@@ -147,7 +194,7 @@
     const HOME_API = "https://sharehubnepal.com/live/api/v2/nepselive/home-page-data";
     const STOCKS = ["BCTL", "BUNGAL", "MABEL", "SDL"];
 
-    // Fetch up to 20 recent days (2 pages of 10)
+    // Fetch 20-day volume history
     async function fetchVolumeHistory(symbol) {
       try {
         const allData = [];
@@ -155,37 +202,29 @@
           const url = `${HISTORY_API}?symbol=${symbol}&page=${page}&pageSize=10`;
           const res = await fetch(url);
           const json = await res.json();
-
           if (json.success && json.data && json.data.content) {
             allData.push(...json.data.content);
           } else break;
-
           if (json.data.content.length < 10) break;
         }
-
-        return allData.slice(0, 20).map(d => ({
-          date: d.date,
-          volume: d.volume
-        }));
+        return allData.slice(0, 20).map(d => ({ date: d.date, volume: d.volume }));
       } catch (err) {
         console.error(`Error fetching 20-day history for ${symbol}:`, err);
         return [];
       }
     }
 
-    // Fetch Market Status & NEPSE Data
+    // Fetch Market Status, NEPSE Data & Top Gainers
     async function fetchMarketStatus() {
       try {
         const res = await fetch(HOME_API);
         const json = await res.json();
         if (!json.marketStatus || !json.indices) return;
 
-        // Background color based on market status
         const isOpen = json.marketStatus.status === "OPEN";
         document.body.classList.toggle("open-market", isOpen);
         document.body.classList.toggle("closed-market", !isOpen);
 
-        // Find NEPSE index
         const nepse = json.indices.find(i => i.symbol === "NEPSE");
         const turnover = json.marketSummary.find(m => m.name.includes("Turnover"));
 
@@ -193,11 +232,25 @@
           const colorClass = nepse.change > 0 ? "green" : nepse.change < 0 ? "red" : "";
           const sign = nepse.change > 0 ? "+" : "";
           document.getElementById("nepseValue").textContent = `${nepse.currentValue.toFixed(2)}`;
-          document.getElementById("nepseChange").innerHTML = `<span class="${colorClass}">${sign}${nepse.change.toFixed(2)} (${nepse.changePercent.toFixed(2)}%)</span>`;
+          document.getElementById("nepseChange").innerHTML =
+            `<span class="${colorClass}">${sign}${nepse.change.toFixed(2)} (${nepse.changePercent.toFixed(2)}%)</span>`;
         }
-       if (turnover) {
-  document.getElementById("turnoverValue").textContent = `Rs ${formatCompactNumber(turnover.value)}`;
-}
+
+        if (turnover) {
+          document.getElementById("turnoverValue").textContent = `Rs ${formatCompactNumber(turnover.value)}`;
+        }
+
+        // ---- Add Top Gainers ----
+        if (json.topGainers && json.topGainers.length) {
+          const list = document.getElementById("gainerList");
+          list.innerHTML = json.topGainers.map(g => `
+            <div class="gainer-item">
+              <div class="gainer-symbol">${g.symbol}</div>
+              <span class="gainer-change">+${g.changePercent.toFixed(2)}%</span>
+              <div class="gainer-ltp">LTP: ${g.lastTradedPrice}</div>
+            </div>
+          `).join("");
+        }
 
       } catch (err) {
         console.error("Error fetching market status:", err);
@@ -213,24 +266,20 @@
         for (const symbol of STOCKS) {
           const card = document.getElementById(symbol);
           const stock = json.data.find(s => s.symbol.toUpperCase() === symbol);
-
           if (stock) {
             const isUp = stock.change > 0;
             const colorClass = isUp ? "green" : (stock.change < 0 ? "red" : "");
             const changeSign = isUp ? "+" : "";
-
             const history = await fetchVolumeHistory(symbol);
             const count = history.length;
-
             let historyHTML = "";
             history.forEach(item => {
               historyHTML += `
                 <div class="history-item">
                   <span>${item.date}</span>
-               <span>${formatCompactNumber(item.volume)}</span>
+                  <span>${formatCompactNumber(item.volume)}</span>
                 </div>`;
             });
-
             card.innerHTML = `
               <div class="symbol">${stock.symbol}</div>
               <div>LTP: <span class="value ${colorClass}">${stock.lastTradedPrice}</span></div>
@@ -242,8 +291,7 @@
               <div class="history">
                 <b>Last ${count} Days Volume:</b>
                 ${historyHTML}
-              </div>
-            `;
+              </div>`;
           } else {
             card.innerHTML = `<div class="symbol">${symbol}</div><div>Not Traded Yet</div>`;
           }
@@ -253,22 +301,20 @@
       }
     }
 
+    function formatCompactNumber(num) {
+      if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + "B";
+      if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + "M";
+      if (num >= 1_000) return (num / 1_000).toFixed(2) + "K";
+      return num;
+    }
+
     async function init() {
       await fetchMarketStatus();
       await fetchLiveData();
     }
 
-   
-	function formatCompactNumber(num) {
-  if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + "B";
-  if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + "M";
-  if (num >= 1_000) return (num / 1_000).toFixed(2) + "K";
-  return num;
-}
-
-//calls
-init();
-setInterval(init, 1000);
+    init();
+    setInterval(init, 1000);
   </script>
 </body>
 </html>
