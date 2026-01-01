@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sundarharaincha Municipality Map</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+  body { margin: 0; font-family: Arial, sans-serif; }
+  #map { width: 100%; height: 100vh; }
+
+  .controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    background: white;
+    padding: 10px;
+    border-radius: 6px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    width: 200px;
+    display:flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .controls button {
+    width: 100%;
+    padding: 6px;
+    border: none;
+    border-radius: 4px;
+    background: #2E3192;
+    color: white;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .controls button:hover { background: #1f246e; }
+  .controls .location { background: #ED1C24; }
+
+  .controls input {
+    width: 100%;
+    padding: 5px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div class="controlsA" style="display:none;">
+  <button onclick="loadWard(2)">Ward 2</button>
+  <button onclick="loadWard(3)">Ward 3</button>
+  <button onclick="loadWard(4)">Ward 4</button>
+  <button onclick="loadWard(5)">Ward 5</button>
+  <button onclick="loadWard(6)">Ward 6</button>
+  <button onclick="loadWard(7)">Ward 7</button>
+  <button onclick="loadWard(9)">Ward 9</button>
+  <button onclick="loadWard(10)">Ward 10</button>
+  <button onclick="loadWard(11)">Ward 11</button>
+</div>
+
+<div class="controls">
+  <input id="coordInput" placeholder="lat, lng">
+  <button onclick="searchCoordinates()">🔍 Search</button>
+  <button class="location" onclick="getUserLocation()">My Location</button>
+  <button onclick="toggleLayerPanel()">📋 Layers</button>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ===============================
+   Initialize Map
+================================ */
+const map = L.map('map').setView([26.66, 87.32], 12);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+/* ===============================
+   Ward Data
+================================ */
+const wards = {
+  2:  { relation: 16025571, area: "15.580 km²", density: "1,751", type: "Semi-dense urban" },
+  3:  { relation: 16025570, area: "9.781 km²",  density: "907",  type: "Suburban" },
+  4:  { relation: 16025569, area: "7.952 km²",  density: "256",  type: "Low density" },
+  5:  { relation: 16025568, area: "11.079 km²", density: "1,167", type: "Urban cluster" },
+  6:  { relation: 16025567, area: "16.113 km²", density: "1,282", type: "Urban" },
+  7:  { relation: 16025566, area: "12.904 km²", density: "1,101", type: "Peri-urban" },
+  9:  { relation: 16025564, area: "—",        density: "—",     type: "—" },
+  10: { relation: 16025563, area: "7.592 km²", density: "585",   type: "Peri-urban" },
+  11: { relation: 16025561, area: "14.289 km²",density: "930",   type: "Peri-urban" }
+};
+
+/* ===============================
+   Layer Holders
+================================ */
+const wardLayers = {};
+const locationLayer = L.layerGroup();
+const searchLayer = L.layerGroup();
+
+/* ===============================
+   Layer Control
+================================ */
+const layerControl = L.control.layers(null, {}, {
+  position: "topleft",
+  collapsed: false
+}).addTo(map);
+
+layerControl.addOverlay(locationLayer, "My Location");
+layerControl.addOverlay(searchLayer, "Search Marker");
+
+// Hide layer panel initially
+const container = layerControl.getContainer();
+container.style.display = "none";
+let layerPanelVisible = false;
+
+function toggleLayerPanel() {
+  if (!container) return;
+  
+  if (layerPanelVisible) {
+    container.style.display = "none";
+  } else {
+    container.style.display = "block";
+  }
+  layerPanelVisible = !layerPanelVisible;
+}
+
+/* ===============================
+   Load Ward Function
+================================ */
+function loadWard(no) {
+  if (wardLayers[no]) {
+    wardLayers[no].addTo(map);
+    return;
+  }
+
+  fetch(`https://polygons.openstreetmap.fr/get_geojson.py?id=${wards[no].relation}&params=0`)
+    .then(res => res.json())
+    .then(data => {
+      const layer = L.geoJSON(data, {
+        style: {
+          color: "#2E3192",
+          weight: 2,
+          fillColor: "#ED1C24",
+          fillOpacity: 0.35
+        }
+      }).bindPopup(`
+        <b>Sundarharaincha – Ward ${no}</b><br>
+        Area: ${wards[no].area}<br>
+        Density: ${wards[no].density} /km²<br>
+        Type: ${wards[no].type}
+      `);
+
+      wardLayers[no] = layer;
+      layer.addTo(map);
+      layerControl.addOverlay(layer, `Ward ${no}`);
+    })
+    .catch(err => console.error("Ward load error:", err));
+}
+
+/* ===============================
+   Load ALL Wards on page load
+================================ */
+window.onload = () => {
+  for (const wardNo in wards) {
+    loadWard(wardNo);
+  }
+};
+
+/* ===============================
+   Get User Location
+================================ */
+function getUserLocation() {
+  if (!navigator.geolocation) return alert("Geolocation not supported");
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const { latitude, longitude, accuracy } = pos.coords;
+      locationLayer.clearLayers();
+
+      L.marker([latitude, longitude])
+        .bindPopup(`Your Location<br>±${Math.round(accuracy)} m`)
+        .addTo(locationLayer);
+
+      L.circle([latitude, longitude], {
+        radius: accuracy,
+        color: "#007bff",
+        fillOpacity: 0.15
+      }).addTo(locationLayer);
+
+      locationLayer.addTo(map);
+      map.setView([latitude, longitude], 16);
+    },
+    () => alert("Location permission denied"),
+    { enableHighAccuracy: true }
+  );
+}
+
+/* ===============================
+   Search Coordinate & Layer
+================================ */
+function searchCoordinates() {
+  const val = document.getElementById("coordInput").value;
+  if (!val.includes(",")) return alert("Use: latitude, longitude");
+
+  const [lat, lng] = val.split(",").map(Number);
+  if (isNaN(lat) || isNaN(lng)) return alert("Invalid coordinates");
+
+  const marker = L.marker([lat, lng])
+    .bindPopup(`<b>Searched Location</b><br>${lat}, ${lng}`)
+    .addTo(searchLayer)
+    .openPopup();
+
+  searchLayer.addTo(map);
+  map.setView([lat, lng], 16);
+}
+</script>
+
+</body>
+</html>
