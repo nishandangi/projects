@@ -126,7 +126,7 @@
 <main>
   <h1>Crypto RSI + MACD Dashboard</h1>
   <div class="muted">
-    Binance USDⓈ-M Perpetual · 1D candles · RSI(14) · MACD(12,26,9)
+    Binance USDⓈ-M Perpetual · 1D running candle · RSI(14) · MACD(12,26,9)
   </div>
 
   <div class="toolbar">
@@ -142,7 +142,7 @@
     <div class="muted">
       BUY: RSI ≤ 30 + bullish MACD crossover.
       SELL: RSI ≥ 70 + bearish MACD crossover.
-      Both must occur on the same completed daily candle.
+      Both must occur on the same running daily candle; values update on every refresh.
     </div>
     <div id="signalFeed">
       <div class="empty">No new signals detected yet.</div>
@@ -151,7 +151,7 @@
 
   <footer id="updated">
     Signals are technical conditions, not guaranteed trade outcomes.
-    Historical candles are processed in memory and are not displayed.
+    The current daily candle is included, so RSI/MACD and signals can change before the candle closes.
   </footer>
 </main>
 
@@ -166,32 +166,38 @@
 <audio id="sellSound" src="https://nishandangi.com.np/resources/audio/ssignal.mp3" preload="auto"></audio>
 
 <script>
+
 /* ==========================================
    1. CONFIGURATION
 ========================================== */
 const CONFIG = {
-  symbols: ["BTCUSDT","ETHUSDT","XRPUSDT","HYPEUSDT","ZECUSDT","SOLUSDT","BNBUSDT","TRXUSDT","XMRUSDT","DOGEUSDT","LSKUSDT","BTWUSDT","TLMUSDT","APTUSDT"],
- 
-  interval: '1d',
+  symbols: [
+    "BTCUSDT", "ETHUSDT", "XRPUSDT", "HYPEUSDT",
+    "ZECUSDT", "SOLUSDT", "BNBUSDT", "TRXUSDT",
+    "XMRUSDT", "DOGEUSDT", "LSKUSDT", "BTWUSDT",
+    "TLMUSDT", "APTUSDT"
+  ],
+  interval: "1d",
   candleLimit: 200,
   rsiPeriod: 14,
   macdFast: 12,
   macdSlow: 26,
   macdSignal: 9,
   refreshMs: 60000,
-  api: 'https://fapi.binance.com/fapi/v1/klines'
+  api: "https://fapi.binance.com/fapi/v1/klines"
 };
 
 let soundEnabled = false;
 let signalHistory = [];
 let notifiedSignals = new Set();
 let popupTimer = null;
+let testAudio = null;
+let refreshInProgress = false;
 
 /* ==========================================
    2. INDICATOR CALCULATIONS
 ========================================== */
 
-// EMA series, seeded from the first available value.
 function emaSeries(values, period) {
   const result = [];
   const alpha = 2 / (period + 1);
@@ -208,7 +214,6 @@ function emaSeries(values, period) {
   return result;
 }
 
-// Wilder's RSI series.
 function rsiSeries(closes, period) {
   const result = Array(closes.length).fill(null);
 
@@ -259,7 +264,10 @@ function calculateIndicators(closes) {
     (_, i) => fastEMA[i] - slowEMA[i]
   );
 
-  const signalLine = emaSeries(macdLine, CONFIG.macdSignal);
+  const signalLine = emaSeries(
+    macdLine,
+    CONFIG.macdSignal
+  );
 
   const histogram = macdLine.map(
     (value, i) => value - signalLine[i]
@@ -271,78 +279,88 @@ function calculateIndicators(closes) {
 }
 
 /* ==========================================
-   3. CARD CREATION
+   3. CREATE DASHBOARD CARDS
 ========================================== */
+
 function createCards() {
-  document.getElementById('dashboard').innerHTML =
+  document.getElementById("dashboard").innerHTML =
     CONFIG.symbols.map(symbol => `
       <article class="card" id="card-${symbol}">
-        <div class="symbol">${symbol.replace('USDT', '')}/USDT</div>
-        <div class="muted">Binance perpetual · Daily</div>
+        <div class="symbol">
+          ${symbol.replace("USDT", "")}/USDT
+        </div>
 
-        <div class="label">Latest completed close</div>
+        <div class="muted">
+          Binance perpetual · Running daily candle
+        </div>
+
+        <div class="label">Current candle price</div>
         <div class="price" id="price-${symbol}">--</div>
 
         <div class="label">RSI (14)</div>
         <div class="rsi" id="rsi-${symbol}">--</div>
-        <div class="status" id="rsiState-${symbol}">Waiting for data</div>
+        <div class="status" id="rsiState-${symbol}">
+          Waiting for data
+        </div>
 
         <div class="label">MACD (12, 26, 9)</div>
         <div class="macd" id="macd-${symbol}">MACD: --</div>
-        <div class="macd" id="macdSignal-${symbol}">Signal: --</div>
-        <div class="macd" id="hist-${symbol}">Histogram: --</div>
+        <div class="macd" id="macdSignal-${symbol}">
+          Signal: --
+        </div>
+        <div class="macd" id="hist-${symbol}">
+          Histogram: --
+        </div>
 
-        <div class="status" id="crossover-${symbol}">No crossover</div>
+        <div class="status" id="crossover-${symbol}">
+          No crossover
+        </div>
         <div class="status" id="marketStatus-${symbol}"></div>
       </article>
-    `).join('');
+    `).join("");
 }
 
 /* ==========================================
-   4. FETCH CANDLES
+   4. FETCH RUNNING DAILY CANDLE
 ========================================== */
+
 async function fetchMarket(symbol) {
   const url = new URL(CONFIG.api);
-  url.searchParams.set('symbol', symbol);
-  url.searchParams.set('interval', CONFIG.interval);
-  url.searchParams.set('limit', CONFIG.candleLimit);
 
-  const response = await fetch(url, { cache: 'no-store' });
+  url.searchParams.set("symbol", symbol);
+  url.searchParams.set("interval", CONFIG.interval);
+  url.searchParams.set("limit", CONFIG.candleLimit);
+
+  const response = await fetch(url, { cache: "no-store" });
 
   if (!response.ok) {
-    throw new Error('Binance HTTP ' + response.status);
+    throw new Error("Binance HTTP " + response.status);
   }
 
   const candles = await response.json();
 
   if (!Array.isArray(candles) || candles.length < 50) {
-    throw new Error('Insufficient candle history or invalid symbol');
+    throw new Error("Insufficient candle history or invalid symbol");
   }
 
-  // Signals use completed candles only to avoid intraday false alerts.
-  const closedCandles = candles.filter(
-    candle => Number(candle[6]) < Date.now()
-  );
-
-  if (closedCandles.length < 50) {
-    throw new Error('Not enough completed daily candles');
-  }
-
-  const closes = closedCandles.map(candle => Number(candle[4]));
+  // Include the currently forming daily candle.
+  // Binance normally returns it as the last kline.
+  const closes = candles.map(candle => Number(candle[4]));
 
   if (closes.some(value => !Number.isFinite(value))) {
-    throw new Error('Invalid closing price data');
+    throw new Error("Invalid closing price data");
   }
 
   const indicators = calculateIndicators(closes);
   const i = closes.length - 1;
   const prev = i - 1;
+  const currentCandle = candles[i];
 
   return {
     close: closes[i],
-    date: new Date(Number(closedCandles[i][0]))
+    date: new Date(Number(currentCandle[0]))
       .toISOString().slice(0, 10),
-    candleTime: Number(closedCandles[i][0]),
+    candleTime: Number(currentCandle[0]),
     rsi: indicators.rsi[i],
     macd: indicators.macdLine[i],
     signal: indicators.signalLine[i],
@@ -353,8 +371,9 @@ async function fetchMarket(symbol) {
 }
 
 /* ==========================================
-   5. SIGNAL LOGIC
+   5. SIGNAL DETECTION
 ========================================== */
+
 function detectSignal(symbol, data) {
   const bullishCross =
     data.prevMacd <= data.prevSignal &&
@@ -364,28 +383,34 @@ function detectSignal(symbol, data) {
     data.prevMacd >= data.prevSignal &&
     data.macd < data.signal;
 
-  // Both conditions must be true on the same completed candle.
+  // Both conditions must occur on the SAME
+  // currently running daily candle.
   const buy = data.rsi <= 30 && bullishCross;
   const sell = data.rsi >= 70 && bearishCross;
 
   document.getElementById(`crossover-${symbol}`).textContent =
-    bullishCross ? 'Bullish MACD crossover' :
-    bearishCross ? 'Bearish MACD crossover' :
-    'No new MACD crossover';
+    bullishCross
+      ? "Bullish MACD crossover"
+      : bearishCross
+        ? "Bearish MACD crossover"
+        : "No new MACD crossover";
 
   if (!buy && !sell) return;
 
-  const type = buy ? 'BUY' : 'SELL';
+  const type = buy ? "BUY" : "SELL";
   const key = `${symbol}-${data.candleTime}-${type}`;
 
-  // Avoid repeating alerts on every 60-second refresh.
+  // Prevent repeated alerts for the same symbol,
+  // candle and signal type.
   if (notifiedSignals.has(key)) return;
+
   notifiedSignals.add(key);
 
   const item = {
     type,
     symbol,
     date: data.date,
+    candleTime: data.candleTime,
     close: data.close,
     rsi: data.rsi,
     macd: data.macd,
@@ -398,79 +423,146 @@ function detectSignal(symbol, data) {
 
   renderSignalFeed();
   showPopup(item);
+
+  // Actual alerts use their own audio elements.
   playSignalSound(type);
 }
 
 /* ==========================================
    6. UPDATE MARKET CARD
 ========================================== */
+
 function showMarket(symbol, data) {
   document.getElementById(`price-${symbol}`).textContent =
-    data.close.toLocaleString('en-US', {
+    data.close.toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 8
     });
 
   const rsiEl = document.getElementById(`rsi-${symbol}`);
   rsiEl.textContent = data.rsi.toFixed(2);
-  rsiEl.className = 'rsi ' +
-    (data.rsi <= 30 ? 'green' :
-     data.rsi >= 70 ? 'red' : 'yellow');
+
+  rsiEl.className = "rsi " +
+    (data.rsi <= 30
+      ? "green"
+      : data.rsi >= 70
+        ? "red"
+        : "yellow");
 
   document.getElementById(`rsiState-${symbol}`).textContent =
-    data.rsi <= 30 ? 'Oversold zone' :
-    data.rsi >= 70 ? 'Overbought zone' : 'Neutral zone';
+    data.rsi <= 30
+      ? "Oversold zone"
+      : data.rsi >= 70
+        ? "Overbought zone"
+        : "Neutral zone";
 
   document.getElementById(`macd-${symbol}`).textContent =
-    'MACD: ' + data.macd.toFixed(6);
+    "MACD: " + data.macd.toFixed(6);
 
   document.getElementById(`macdSignal-${symbol}`).textContent =
-    'Signal: ' + data.signal.toFixed(6);
+    "Signal: " + data.signal.toFixed(6);
 
   const histEl = document.getElementById(`hist-${symbol}`);
-  histEl.textContent = 'Histogram: ' + data.histogram.toFixed(6);
-  histEl.className = 'macd ' +
-    (data.histogram >= 0 ? 'green' : 'red');
+  histEl.textContent =
+    "Histogram: " + data.histogram.toFixed(6);
+
+  histEl.className =
+    "macd " + (data.histogram >= 0 ? "green" : "red");
 
   document.getElementById(`marketStatus-${symbol}`).textContent =
-    'Last completed candle: ' + data.date + ' UTC';
+    "Running daily candle: " + data.date + " UTC";
 
   detectSignal(symbol, data);
 }
 
 /* ==========================================
-   7. POPUP AND SOUND
+   7. POPUP
 ========================================== */
+
 function showPopup(item) {
-  const popup = document.getElementById('popup');
+  const popup = document.getElementById("popup");
   popup.className = item.type.toLowerCase();
 
-  document.getElementById('popupTitle').textContent =
-    `${item.type === 'BUY' ? '▲ BUY SIGNAL' : '▼ SELL SIGNAL'} — ${item.symbol}`;
+  document.getElementById("popupTitle").textContent =
+    `${item.type === "BUY" ? "▲ BUY SIGNAL" : "▼ SELL SIGNAL"} — ${item.symbol}`;
 
-  document.getElementById('popupDetails').textContent =
+  document.getElementById("popupDetails").textContent =
     `Daily candle: ${item.date} UTC\n` +
-    `Close: ${item.close}\n` +
+    `Price: ${item.close}\n` +
     `RSI(14): ${item.rsi.toFixed(2)}\n` +
     `MACD: ${item.macd.toFixed(6)}\n` +
     `Signal line: ${item.signal.toFixed(6)}\n` +
     `Histogram: ${item.histogram.toFixed(6)}`;
 
-  popup.style.display = 'block';
+  popup.style.display = "block";
 
   clearTimeout(popupTimer);
   popupTimer = setTimeout(closePopup, 15000);
 }
 
 function closePopup() {
-  document.getElementById('popup').style.display = 'none';
+  document.getElementById("popup").style.display = "none";
+}
+
+/* ==========================================
+   8. SOUND TEST AND SIGNAL ALERTS
+========================================== */
+
+// The test uses a separate audio instance.
+// Stopping the test never stops the real alert audio.
+async function enableSound() {
+  const originalBuyAudio = document.getElementById("buySound");
+  const summary = document.getElementById("summary");
+
+  // Stop only a previous test, if one is still playing.
+  if (testAudio) {
+    testAudio.pause();
+    testAudio.currentTime = 0;
+  }
+
+  // Clone the audio so the test and actual BUY alert
+  // cannot interrupt or cancel each other.
+  testAudio = originalBuyAudio.cloneNode(true);
+  testAudio.volume = originalBuyAudio.volume;
+
+  try {
+    testAudio.currentTime = 0;
+    await testAudio.play();
+
+    // Enable actual signal alerts immediately.
+    soundEnabled = true;
+
+    summary.textContent =
+      "Sound enabled. Test playing; signal alerts are active.";
+
+    const thisTest = testAudio;
+
+    // Stop the test after 2 seconds ONLY.
+    setTimeout(() => {
+      thisTest.pause();
+      thisTest.currentTime = 0;
+
+      if (testAudio === thisTest) {
+        summary.textContent =
+          "Sound enabled. BUY/SELL signal alerts remain active.";
+      }
+    }, 100);
+
+  } catch (error) {
+    // A test failure must not disable an already-enabled
+    // signal-alert system.
+    summary.textContent =
+      "Test sound failed. Check the audio URL or browser permissions.";
+  }
 }
 
 async function playSignalSound(type) {
   if (!soundEnabled) return;
 
+  // Use the original audio elements for actual alerts.
+  // Never stop or reset testAudio here.
   const audio = document.getElementById(
-    type === 'BUY' ? 'buySound' : 'sellSound'
+    type === "BUY" ? "buySound" : "sellSound"
   );
 
   try {
@@ -478,31 +570,16 @@ async function playSignalSound(type) {
     audio.currentTime = 0;
     await audio.play();
   } catch (error) {
-    console.warn('Sound playback failed:', error);
-  }
-}
-
-async function enableSound() {
-  const audio = document.getElementById('buySound');
-
-  try {
-    audio.currentTime = 0;
-    await audio.play();
-    soundEnabled = true;
-
-    document.getElementById('summary').textContent =
-      'Sound enabled. Buy sound test played.';
-  } catch (error) {
-    document.getElementById('summary').textContent =
-      'Sound could not play. Check the MP4 file paths.';
+    console.warn("Signal sound playback failed:", error);
   }
 }
 
 /* ==========================================
-   8. SIGNAL HISTORY
+   9. SIGNAL HISTORY
 ========================================== */
+
 function renderSignalFeed() {
-  const feed = document.getElementById('signalFeed');
+  const feed = document.getElementById("signalFeed");
 
   if (!signalHistory.length) {
     feed.innerHTML =
@@ -513,17 +590,18 @@ function renderSignalFeed() {
   feed.replaceChildren();
 
   signalHistory.forEach(item => {
-    const box = document.createElement('div');
-    box.className = 'signal-item ' + item.type.toLowerCase();
+    const box = document.createElement("div");
+    box.className = "signal-item " + item.type.toLowerCase();
 
-    const title = document.createElement('div');
-    title.className = 'signal-title';
+    const title = document.createElement("div");
+    title.className = "signal-title";
     title.textContent = `${item.type} · ${item.symbol}`;
 
-    const details = document.createElement('div');
-    details.className = 'signal-details';
+    const details = document.createElement("div");
+    details.className = "signal-details";
+
     details.textContent =
-      `${item.date} UTC | Close: ${item.close} | ` +
+      `${item.date} UTC | Price: ${item.close} | ` +
       `RSI: ${item.rsi.toFixed(2)} | ` +
       `MACD: ${item.macd.toFixed(6)} | ` +
       `Signal: ${item.signal.toFixed(6)}`;
@@ -534,52 +612,66 @@ function renderSignalFeed() {
 }
 
 /* ==========================================
-   9. REFRESH
+   10. REFRESH ALL MARKETS
 ========================================== */
+
 async function refreshAll() {
-  const button = document.getElementById('refresh');
-  const summary = document.getElementById('summary');
+  if (refreshInProgress) return;
+  refreshInProgress = true;
+
+  const button = document.getElementById("refresh");
+  const summary = document.getElementById("summary");
 
   button.disabled = true;
-  summary.textContent = 'Updating markets...';
+  summary.textContent = "Updating running daily candles...";
 
   let successful = 0;
 
-  // Sequential requests reduce bursts against the public API.
-  for (const symbol of CONFIG.symbols) {
-    try {
-      const data = await fetchMarket(symbol);
+  try {
+    for (const symbol of CONFIG.symbols) {
+      try {
+        const data = await fetchMarket(symbol);
 
-      document.getElementById(`card-${symbol}`)
-        .querySelectorAll('.error')
-        .forEach(el => el.classList.remove('error'));
+        document.getElementById(`card-${symbol}`)
+          .querySelectorAll(".error")
+          .forEach(el => el.classList.remove("error"));
 
-      showMarket(symbol, data);
-      successful++;
-    } catch (error) {
-      document.getElementById(`price-${symbol}`).textContent = '--';
-      document.getElementById(`rsi-${symbol}`).textContent = '--';
+        showMarket(symbol, data);
+        successful++;
 
-      const state = document.getElementById(`rsiState-${symbol}`);
-      state.textContent = 'Unavailable: ' + error.message;
-      state.className = 'status error';
+      } catch (error) {
+        document.getElementById(`price-${symbol}`).textContent = "--";
+        document.getElementById(`rsi-${symbol}`).textContent = "--";
+
+        const state = document.getElementById(`rsiState-${symbol}`);
+        state.textContent = "Unavailable: " + error.message;
+        state.className = "status error";
+      }
     }
+
+    summary.textContent =
+      `${successful}/${CONFIG.symbols.length} markets loaded` +
+      (soundEnabled ? " · Sound alerts ON" : " · Sound alerts OFF");
+
+    document.getElementById("updated").textContent =
+      `Last refresh: ${new Date().toLocaleTimeString()}. ` +
+      `Automatic refresh every ${CONFIG.refreshMs / 1000} seconds. ` +
+      `RSI/MACD use the running daily candle.`;
+
+  } finally {
+    button.disabled = false;
+    refreshInProgress = false;
   }
-
-  summary.textContent =
-    `${successful}/${CONFIG.symbols.length} markets loaded`;
-
-  document.getElementById('updated').textContent =
-    `Last refresh: ${new Date().toLocaleTimeString()}. ` +
-    `Automatic refresh every ${CONFIG.refreshMs / 1000} seconds. ` +
-    `Signals are evaluated on completed daily candles only.`;
-
-  button.disabled = false;
 }
+
+/* ==========================================
+   11. START DASHBOARD
+========================================== */
 
 createCards();
 refreshAll();
 setInterval(refreshAll, CONFIG.refreshMs);
+
 </script>
 </body>
 </html>
