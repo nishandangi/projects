@@ -1,0 +1,176 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>datas</title>
+<style>
+body {
+  background: #10151e;
+  color: #eee;
+  font: 13px Arial, sans-serif;
+  padding: 15px;
+}
+h2 { color: #f0b90b; }
+#status { color: #aaa; margin: 12px 0; }
+.wrap {
+  overflow: auto;
+  max-height: 82vh;
+  border: 1px solid #343e4e;
+}
+table {
+  border-collapse: collapse;
+  white-space: nowrap;
+  width: max-content;
+  min-width: 100%;
+}
+th, td {
+  border: 1px solid #303a49;
+  padding: 9px 12px;
+  text-align: right;
+}
+th {
+  background: #252f40;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+th:first-child, td:first-child {
+  position: sticky;
+  left: 0;
+  text-align: left;
+  background: #1b2432;
+  z-index: 1;
+  font-weight: bold;
+}
+th:first-child { z-index: 3; }
+button {
+  background: #f0b90b;
+  border: 0;
+  padding: 9px 14px;
+  cursor: pointer;
+  font-weight: bold;
+}
+</style>
+</head>
+<body>
+
+<h2>Binance Futures — 4H Closing Prices</h2>
+<div id="status">Loading market data...</div>
+<button onclick="loadData()">Refresh Now</button>
+
+<div class="wrap">
+<table id="prices">
+  <thead></thead>
+  <tbody></tbody>
+</table>
+</div>
+
+<script>
+const symbols = [
+  "BTCUSDT", "ETHUSDT", "XRPUSDT", "HYPEUSDT",
+  "ZECUSDT", "SOLUSDT", "BNBUSDT", "TRXUSDT",
+  "XMRUSDT", "DOGEUSDT", "LSKUSDT", "BTWUSDT",
+  "TLMUSDT", "APTUSDT"
+];
+
+const API = "https://fapi.binance.com/fapi/v1/klines";
+const LIMIT = 50;
+let busy = false;
+
+function formatDate(timestamp) {
+  const d = new Date(Number(timestamp));
+  return `${String(d.getUTCMonth() + 1).padStart(2, "0")}/` +
+         `${String(d.getUTCDate()).padStart(2, "0")}/` +
+         `${d.getUTCFullYear()} ` +
+         `${String(d.getUTCHours()).padStart(2, "0")}:00`;
+}
+
+function formatPrice(value) {
+  return Number(value).toLocaleString("en-US", {
+    useGrouping: false,
+    maximumFractionDigits: 8
+  });
+}
+
+async function loadData() {
+  if (busy) return;
+  busy = true;
+  document.getElementById("status").textContent = "Fetching closing prices...";
+
+  try {
+    const results = await Promise.all(symbols.map(async symbol => {
+      try {
+        const url = `${API}?symbol=${symbol}&interval=4h&limit=${LIMIT}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!response.ok || !Array.isArray(data)) {
+          throw new Error(data.msg || "API error");
+        }
+
+        return { symbol, data, error: false };
+      } catch (error) {
+        return { symbol, data: [], error: true, message: error.message };
+      }
+    }));
+
+    // Use the latest 50 unique candle opening timestamps across all pairs.
+    const timestamps = [...new Set(
+      results.flatMap(r => r.data.map(c => Number(c[0])))
+    )].sort((a, b) => b - a).slice(0, LIMIT);
+
+    const thead = document.querySelector("#prices thead");
+    const tbody = document.querySelector("#prices tbody");
+    thead.replaceChildren();
+    tbody.replaceChildren();
+
+    const header = document.createElement("tr");
+    ["Pair / Date", ...timestamps.map(formatDate)].forEach(label => {
+      const th = document.createElement("th");
+      th.textContent = label;
+      header.appendChild(th);
+    });
+    thead.appendChild(header);
+
+    results.forEach(result => {
+      const tr = document.createElement("tr");
+
+      const name = document.createElement("td");
+      name.textContent = result.symbol;
+      tr.appendChild(name);
+
+      const closeByTime = new Map(
+        result.data.map(c => [Number(c[0]), c[4]])
+      );
+
+      timestamps.forEach(timestamp => {
+        const td = document.createElement("td");
+        const close = closeByTime.get(timestamp);
+        td.textContent = close === undefined ? "—" : formatPrice(close);
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    const success = results.filter(r => !r.error).length;
+    document.getElementById("status").textContent =
+      `Updated ${new Date().toLocaleString()} | ` +
+      `${success}/${symbols.length} pairs loaded | ` +
+      `50 latest 4H candles where available | Times in UTC`;
+
+  } catch (error) {
+    document.getElementById("status").textContent =
+      "Unable to load data. Check your connection and try again.";
+  } finally {
+    busy = false;
+  }
+}
+
+loadData();
+setInterval(loadData, 60000);
+</script>
+</body>
+</html>
