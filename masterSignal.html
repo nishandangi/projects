@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crypto Market Monitoring Dashboard</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 22px; background: #10141c; color: #f2f4f8; font: 14px Arial, sans-serif; }
+main { margin: auto; }
+h1 { font-size: 24px; margin-bottom: 6px; }
+h2 { font-size: 18px; margin-top: 28px; }
+.muted { color: #9ba5b5; font-size: 12px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 20px 0; }
+button { border: 0; border-radius: 7px; padding: 10px 14px; background: #3478f6; color: white; cursor: pointer; }
+button:disabled { opacity: .55; }
+
+/* Timeframe buttons */
+.tf-group { display: flex; gap: 6px; }
+button.tf { padding: 9px 13px; background: #202a39; border: 1px solid #435168; color: #c2ccda; }
+button.tf.active { background: #3478f6; border-color: #3478f6; color: #fff; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 14px; }
+.card { background: #1a2230; border: 1px solid #2a3547; border-radius: 12px; padding: 16px; min-width: 0; transition: background .2s, border-color .2s; }
+.card.support-active { background: #103c30; border: 2px solid #35d49a; }
+.card.resistance-active { background: #451f29; border: 2px solid #ff6868; }
+.card.both-active { background: #382b4c; border: 2px solid #bd8aff; }
+.symbol { font-size: 17px; font-weight: bold; }
+.label { color: #9ba5b5; font-size: 12px; margin-top: 17px; }
+.price { font-size: 25px; font-weight: bold; margin-top: 7px; }
+.rsi { font-size: 26px; font-weight: bold; margin-top: 7px; }
+.macd { font-size: 14px; font-weight: bold; margin-top: 8px; }
+.status { margin-top: 9px; font-size: 12px; color: #aab5c5; }
+.green { color: #52d6a0; }
+.red { color: #ff7777; }
+.yellow { color: #f0c15c; }
+.error { color: #ff8585; }
+.level-box { margin-top: 16px; padding: 12px; border-radius: 9px; background: #101722; border: 1px solid #344154; }
+.level-row { display: grid; grid-template-columns: 1fr 1.1fr; gap: 8px; align-items: center; margin-top: 9px; }
+.level-row label { font-size: 12px; color: #c2ccda; }
+.level-input { width: 100%; min-width: 0; padding: 9px 7px; border: 1px solid #435168; border-radius: 6px; background: #202a39; color: white; font-size: 13px; }
+.level-input:focus { outline: 1px solid #5791ff; border-color: #5791ff; }
+.level-status { font-size: 12px; line-height: 1.5; margin-top: 11px; font-weight: bold; }
+.monitor-panel, .signal-panel { margin-top: 24px; padding: 16px; background: #171e29; border: 1px solid #2a3547; border-radius: 12px; }
+.monitor-item, .signal-item { margin-top: 10px; padding: 13px; border-radius: 8px; background: #202a39; border-left: 4px solid #778399; }
+.monitor-item.support { border-left-color: #35d49a; }
+.monitor-item.resistance { border-left-color: #ff6868; }
+.signal-item.buy { border-left-color: #35d49a; }
+.signal-item.sell { border-left-color: #ff6868; }
+.signal-title { font-weight: bold; font-size: 15px; }
+.signal-details { color: #b5c0d0; font-size: 12px; margin-top: 6px; line-height: 1.7; }
+.empty { color: #9ba5b5; padding: 12px 0; }
+#popup { position: fixed; z-index: 10; top: 18px; right: 18px; width: min(370px, calc(100vw - 36px)); display: none; white-space: pre-line; background: #202a39; border: 1px solid #45546a; border-radius: 12px; padding: 18px; box-shadow: 0 10px 40px #0009; }
+#popup.buy, #popup.support { border-color: #35d49a; }
+#popup.sell, #popup.resistance { border-color: #ff6868; }
+#popupTitle { font-size: 18px; font-weight: bold; }
+#popupDetails { margin-top: 10px; color: #c4ccda; line-height: 1.7; }
+footer { color: #8e9bad; margin-top: 24px; font-size: 12px; line-height: 1.7; }
+@media (max-width: 480px) { body { padding: 12px; } .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+
+<body>
+<main>
+  <h1>Crypto Market Monitoring Dashboard</h1>
+  <div class="muted">
+    Binance USDⓈ-M Perpetual · <span id="tfLabel">1D</span> running candle ·
+    RSI(14) · MACD(12,26,9) · Support/Resistance monitor
+  </div>
+
+  <div class="toolbar">
+    <button id="refresh" onclick="refreshAll()">Refresh now</button>
+    <button onclick="enableSound()">Enable sound &amp; test</button>
+    <span class="tf-group" role="group" aria-label="Timeframe">
+      <button class="tf active" data-tf="1d" aria-pressed="true" onclick="setTimeframe('1d')">1D</button>
+      <button class="tf" data-tf="4h" aria-pressed="false" onclick="setTimeframe('4h')">4H</button>
+      <button class="tf" data-tf="1h" aria-pressed="false" onclick="setTimeframe('1h')">1H</button>
+    </span>
+    <span id="summary" class="muted">Connecting...</span>
+  </div>
+
+  <section id="dashboard" class="grid"></section>
+
+  <section class="monitor-panel">
+    <h2 style="margin-top:0">Support / Resistance Alerts</h2>
+    <div class="muted">
+      Support: price ≤ your support level (GREEN).
+      Resistance: price ≥ your resistance level (RED).
+      Alerts are independent of RSI, MACD and the selected timeframe.
+    </div>
+    <div id="monitorFeed"><div class="empty">No support/resistance alerts yet.</div></div>
+  </section>
+
+  <section class="signal-panel">
+    <h2 style="margin-top:0">RSI + MACD Trading Signal Alerts</h2>
+    <div class="muted">
+      BUY: RSI ≤ 30 + bullish MACD crossover.
+      SELL: RSI ≥ 70 + bearish MACD crossover.
+      Both conditions must occur on the same running candle of the selected timeframe.
+    </div>
+    <div id="signalFeed"><div class="empty">No new trading signals detected yet.</div></div>
+  </section>
+
+  <footer id="updated">
+    Support/resistance alerts are for monitoring, not automatic trade entries.
+    The current candle is still forming; price and indicators can change.
+    Levels are saved in this browser's local storage.
+  </footer>
+</main>
+
+<div id="popup" role="status" aria-live="polite">
+  <div id="popupTitle"></div>
+  <div id="popupDetails"></div>
+  <button onclick="closePopup()">Dismiss</button>
+</div>
+
+<audio id="buySound" src="https://nishandangi.com.np/resources/audio/bsignal.mp3" preload="auto"></audio>
+<audio id="sellSound" src="https://nishandangi.com.np/resources/audio/ssignal.mp3" preload="auto"></audio>
+
+<script>
+/* 1. CONFIGURATION */
+const CONFIG = {
+  symbols: [
+    "BTCUSDT", "ETHUSDT", "XRPUSDT", "HYPEUSDT",
+    "ZECUSDT", "SOLUSDT", "BNBUSDT", "TRXUSDT",
+    "XMRUSDT", "DOGEUSDT", "LSKUSDT", "BTWUSDT",
+    "TLMUSDT", "APTUSDT"
+  ],
+  interval: "1d",            // default timeframe
+  candleLimit: 200,
+  rsiPeriod: 14,
+  macdFast: 12,
+  macdSlow: 26,
+  macdSignal: 9,
+  refreshMs: 60000,
+  api: "https://fapi.binance.com/fapi/v1/klines",
+  storageKey: "crypto_monitor_levels_v1"
+};
+
+const TIMEFRAMES = ["1d", "4h", "1h"];
+
+let soundEnabled = false;
+let signalHistory = [];
+let monitorHistory = [];
+const notifiedSignals = new Set();
+const notifiedLevels = new Set();
+const marketCache = {};
+
+let popupTimer = null;
+let testAudio = null;
+let refreshInProgress = false;
+let refreshToken = 0;
+
+/* 2. LOCAL STORAGE: SUPPORT / RESISTANCE (shared by all timeframes) */
+function loadLevels() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CONFIG.storageKey) || "{}");
+    return saved && typeof saved === "object" ? saved : {};
+  } catch (error) {
+    console.warn("Could not load saved levels:", error);
+    return {};
+  }
+}
+
+let savedLevels = loadLevels();
+
+function getLevels(symbol) {
+  return savedLevels[symbol] || { support: "", resistance: "" };
+}
+
+function saveLevel(symbol, type, value) {
+  if (!savedLevels[symbol]) savedLevels[symbol] = { support: "", resistance: "" };
+  savedLevels[symbol][type] = value;
+  try {
+    localStorage.setItem(CONFIG.storageKey, JSON.stringify(savedLevels));
+  } catch (error) {
+    console.warn("Could not save monitoring levels:", error);
+  }
+}
+
+function handleLevelInput(symbol, type, input) {
+  const raw = input.value.trim();
+
+  // Empty disables a level; otherwise accept positive numeric prices only.
+  if (raw !== "" && (!Number.isFinite(Number(raw)) || Number(raw) <= 0)) {
+    input.setCustomValidity("Enter a positive price or leave blank.");
+    input.reportValidity();
+    return;
+  }
+
+  input.setCustomValidity("");
+  saveLevel(symbol, type, raw);
+
+  if (marketCache[symbol]) evaluateLevels(symbol, marketCache[symbol], false);
+  else updateLevelStatus(symbol, null);
+}
+
+/* 3. INDICATOR CALCULATIONS */
+function emaSeries(values, period) {
+  const result = [];
+  const alpha = 2 / (period + 1);
+  let ema = null;
+  values.forEach(value => {
+    ema = ema === null ? value : alpha * value + (1 - alpha) * ema;
+    result.push(ema);
+  });
+  return result;
+}
+
+function rsiSeries(closes, period) {
+  const result = Array(closes.length).fill(null);
+  if (closes.length <= period) return result;
+
+  let gainSum = 0;
+  let lossSum = 0;
+  for (let i = 1; i <= period; i++) {
+    const change = closes[i] - closes[i - 1];
+    gainSum += Math.max(change, 0);
+    lossSum += Math.max(-change, 0);
+  }
+
+  let avgGain = gainSum / period;
+  let avgLoss = lossSum / period;
+
+  function value() {
+    if (avgGain === 0 && avgLoss === 0) return 50;
+    if (avgLoss === 0) return 100;
+    if (avgGain === 0) return 0;
+    return 100 - 100 / (1 + avgGain / avgLoss);
+  }
+
+  result[period] = value();
+
+  for (let i = period + 1; i < closes.length; i++) {
+    const change = closes[i] - closes[i - 1];
+    avgGain = (avgGain * (period - 1) + Math.max(change, 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + Math.max(-change, 0)) / period;
+    result[i] = value();
+  }
+  return result;
+}
+
+function calculateIndicators(closes) {
+  const fastEMA = emaSeries(closes, CONFIG.macdFast);
+  const slowEMA = emaSeries(closes, CONFIG.macdSlow);
+  const macdLine = closes.map((_, i) => fastEMA[i] - slowEMA[i]);
+  const signalLine = emaSeries(macdLine, CONFIG.macdSignal);
+  const histogram = macdLine.map((value, i) => value - signalLine[i]);
+  const rsi = rsiSeries(closes, CONFIG.rsiPeriod);
+  return { rsi, macdLine, signalLine, histogram };
+}
+
+/* 4. CREATE DASHBOARD CARDS */
+function createCards() {
+  document.getElementById("dashboard").innerHTML =
+    CONFIG.symbols.map(symbol => {
+      const levels = getLevels(symbol);
+      return `
+      <article class="card" id="card-${symbol}">
+        <div class="symbol">${symbol.replace("USDT", "")}/USDT</div>
+        <div class="muted">Binance perpetual · Running ${CONFIG.interval.toUpperCase()} candle</div>
+
+        <div class="label">Current candle price</div>
+        <div class="price" id="price-${symbol}">--</div>
+
+        <div class="level-box">
+          <div><strong>Price Level Monitor</strong></div>
+
+          <div class="level-row">
+            <label for="support-${symbol}">Support price</label>
+            <input class="level-input" id="support-${symbol}" type="number" min="0" step="any"
+              placeholder="Enter support" value="${escapeAttribute(levels.support)}"
+              oninput="handleLevelInput('${symbol}', 'support', this)">
+          </div>
+
+          <div class="level-row">
+            <label for="resistance-${symbol}">Resistance price</label>
+            <input class="level-input" id="resistance-${symbol}" type="number" min="0" step="any"
+              placeholder="Enter resistance" value="${escapeAttribute(levels.resistance)}"
+              oninput="handleLevelInput('${symbol}', 'resistance', this)">
+          </div>
+
+          <div class="level-status" id="levelStatus-${symbol}">Enter your levels to monitor</div>
+        </div>
+
+        <div class="label">RSI (14)</div>
+        <div class="rsi" id="rsi-${symbol}">--</div>
+        <div class="status" id="rsiState-${symbol}">Waiting for data</div>
+
+        <div class="label">MACD (12, 26, 9)</div>
+        <div class="macd" id="macd-${symbol}">MACD: --</div>
+        <div class="macd" id="macdSignal-${symbol}">Signal: --</div>
+        <div class="macd" id="hist-${symbol}">Histogram: --</div>
+
+        <div class="status" id="crossover-${symbol}">No crossover</div>
+        <div class="status" id="marketStatus-${symbol}"></div>
+      </article>`;
+    }).join("");
+}
+
+function escapeAttribute(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/* 5. FETCH RUNNING CANDLE (for the selected timeframe) */
+async function fetchMarket(symbol, interval = CONFIG.interval) {
+  const url = new URL(CONFIG.api);
+  url.searchParams.set("symbol", symbol);
+  url.searchParams.set("interval", interval);
+  url.searchParams.set("limit", CONFIG.candleLimit);
+
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error("Binance HTTP " + response.status);
+
+  const candles = await response.json();
+  if (!Array.isArray(candles) || candles.length < 50) {
+    throw new Error("Insufficient history or invalid symbol");
+  }
+
+  const closes = candles.map(candle => Number(candle[4]));
+  if (closes.some(value => !Number.isFinite(value))) {
+    throw new Error("Invalid closing price data");
+  }
+
+  const ind = calculateIndicators(closes);
+  const i = closes.length - 1;
+  const prev = i - 1;
+  const openTime = Number(candles[i][0]);
+  const iso = new Date(openTime).toISOString();
+
+  return {
+    close: closes[i],
+    date: iso.slice(0, 10),                                        // UTC day
+    label: iso.slice(0, interval === "1d" ? 10 : 16).replace("T", " "),
+    interval,
+    candleTime: openTime,
+    rsi: ind.rsi[i],
+    macd: ind.macdLine[i],
+    signal: ind.signalLine[i],
+    histogram: ind.histogram[i],
+    prevMacd: ind.macdLine[prev],
+    prevSignal: ind.signalLine[prev]
+  };
+}
+
+/* 6. SUPPORT / RESISTANCE MONITOR */
+function evaluateLevels(symbol, data, allowAlert = true) {
+  const levels = getLevels(symbol);
+  const support = String(levels.support).trim() === "" ? null : Number(levels.support);
+  const resistance = String(levels.resistance).trim() === "" ? null : Number(levels.resistance);
+
+  const supportHit = support !== null && Number.isFinite(support) && support > 0 && data.close <= support;
+  const resistanceHit = resistance !== null && Number.isFinite(resistance) && resistance > 0 && data.close >= resistance;
+
+  const card = document.getElementById(`card-${symbol}`);
+  card.classList.remove("support-active", "resistance-active", "both-active");
+  if (supportHit && resistanceHit) card.classList.add("both-active");
+  else if (supportHit) card.classList.add("support-active");
+  else if (resistanceHit) card.classList.add("resistance-active");
+
+  let status;
+  if (supportHit && resistanceHit) status = "Both levels reached — check your level settings";
+  else if (supportHit) status = `SUPPORT REACHED · Price ≤ ${support}`;
+  else if (resistanceHit) status = `RESISTANCE REACHED · Price ≥ ${resistance}`;
+  else if (support !== null && resistance !== null) status = `Monitoring support ${support} / resistance ${resistance}`;
+  else if (support !== null) status = `Monitoring support: ${support}`;
+  else if (resistance !== null) status = `Monitoring resistance: ${resistance}`;
+  else status = "Enter support and/or resistance";
+
+  const statusEl = document.getElementById(`levelStatus-${symbol}`);
+  statusEl.textContent = status;
+  statusEl.className = "level-status " +
+    (supportHit && resistanceHit ? "yellow" : supportHit ? "green" : resistanceHit ? "red" : "");
+
+  if (!allowAlert) return;
+  if (supportHit) triggerLevelAlert(symbol, "SUPPORT", support, data);
+  if (resistanceHit) triggerLevelAlert(symbol, "RESISTANCE", resistance, data);
+}
+
+function triggerLevelAlert(symbol, type, level, data) {
+  // Once per symbol, type, level value and UTC day, whatever the timeframe.
+  // Changing the configured level creates a new alert identity.
+  const key = [symbol, type, level, data.date].join("-");
+  if (notifiedLevels.has(key)) return;
+  notifiedLevels.add(key);
+
+  const item = { type, symbol, level, price: data.close, date: data.label };
+  monitorHistory.unshift(item);
+  monitorHistory = monitorHistory.slice(0, 50);
+
+  renderMonitorFeed();
+  showMonitorPopup(item);
+  playSignalSound(type === "SUPPORT" ? "BUY" : "SELL");
+}
+
+function updateLevelStatus(symbol, data) {
+  const statusEl = document.getElementById(`levelStatus-${symbol}`);
+  if (!statusEl) return;
+
+  if (!data) {
+    const levels = getLevels(symbol);
+    statusEl.textContent = levels.support || levels.resistance
+      ? "Saved · Waiting for market price"
+      : "Enter support and/or resistance";
+    statusEl.className = "level-status";
+    return;
+  }
+  evaluateLevels(symbol, data, false);
+}
+
+function renderMonitorFeed() {
+  const feed = document.getElementById("monitorFeed");
+  if (!monitorHistory.length) {
+    feed.innerHTML = '<div class="empty">No support/resistance alerts yet.</div>';
+    return;
+  }
+
+  feed.replaceChildren();
+  monitorHistory.forEach(item => {
+    const box = document.createElement("div");
+    box.className = "monitor-item " + item.type.toLowerCase();
+
+    const title = document.createElement("div");
+    title.className = "signal-title";
+    title.textContent = `${item.type} REACHED · ${item.symbol}`;
+
+    const details = document.createElement("div");
+    details.className = "signal-details";
+    details.textContent =
+      `${item.date} UTC | Current price: ${item.price} | ` +
+      `Configured ${item.type.toLowerCase()}: ${item.level}`;
+
+    box.append(title, details);
+    feed.appendChild(box);
+  });
+}
+
+function showPopup(cls, title, details) {
+  const popup = document.getElementById("popup");
+  popup.className = cls;
+  document.getElementById("popupTitle").textContent = title;
+  document.getElementById("popupDetails").textContent = details;
+  popup.style.display = "block";
+  clearTimeout(popupTimer);
+  popupTimer = setTimeout(closePopup, 15000);
+}
+
+function showMonitorPopup(item) {
+  showPopup(
+    item.type.toLowerCase(),
+    item.type === "SUPPORT" ? `SUPPORT REACHED — ${item.symbol}` : `RESISTANCE REACHED — ${item.symbol}`,
+    `Candle: ${item.date} UTC\n` +
+    `Current price: ${item.price}\n` +
+    `${item.type} level: ${item.level}\n` +
+    `Monitoring alert only — no trade placed.`
+  );
+}
+
+function closePopup() {
+  document.getElementById("popup").style.display = "none";
+}
+
+/* 7. RSI + MACD SIGNAL DETECTION */
+function detectSignal(symbol, data) {
+  const bullishCross = data.prevMacd <= data.prevSignal && data.macd > data.signal;
+  const bearishCross = data.prevMacd >= data.prevSignal && data.macd < data.signal;
+
+  const buy = data.rsi <= 30 && bullishCross;
+  const sell = data.rsi >= 70 && bearishCross;
+
+  document.getElementById(`crossover-${symbol}`).textContent =
+    bullishCross ? "Bullish MACD crossover"
+    : bearishCross ? "Bearish MACD crossover"
+    : "No new MACD crossover";
+
+  if (!buy && !sell) return;
+
+  const type = buy ? "BUY" : "SELL";
+  // The timeframe is part of the key so a 1D and a 4H candle opening at the same time never collide.
+  const key = `${symbol}-${data.interval}-${data.candleTime}-${type}`;
+  if (notifiedSignals.has(key)) return;
+  notifiedSignals.add(key);
+
+  const item = {
+    type, symbol,
+    interval: data.interval,
+    date: data.label,
+    close: data.close,
+    rsi: data.rsi,
+    macd: data.macd,
+    signal: data.signal,
+    histogram: data.histogram
+  };
+
+  signalHistory.unshift(item);
+  signalHistory = signalHistory.slice(0, 50);
+
+  renderSignalFeed();
+  showSignalPopup(item);
+  playSignalSound(type);
+}
+
+function showSignalPopup(item) {
+  showPopup(
+    item.type.toLowerCase(),
+    `${item.type === "BUY" ? "BUY SIGNAL" : "SELL SIGNAL"} — ${item.symbol} (${item.interval.toUpperCase()})`,
+    `Candle: ${item.date} UTC\n` +
+    `Price: ${item.close}\n` +
+    `RSI(14): ${item.rsi.toFixed(2)}\n` +
+    `MACD: ${item.macd.toFixed(6)}\n` +
+    `Signal line: ${item.signal.toFixed(6)}\n` +
+    `Histogram: ${item.histogram.toFixed(6)}`
+  );
+}
+
+/* 8. UPDATE MARKET CARD */
+function showMarket(symbol, data) {
+  marketCache[symbol] = data;
+  const el = id => document.getElementById(`${id}-${symbol}`);
+
+  el("price").textContent = data.close.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 8
+  });
+
+  const rsiEl = el("rsi");
+  rsiEl.textContent = data.rsi.toFixed(2);
+  rsiEl.className = "rsi " + (data.rsi <= 30 ? "green" : data.rsi >= 70 ? "red" : "yellow");
+
+  el("rsiState").textContent =
+    data.rsi <= 30 ? "Oversold zone" : data.rsi >= 70 ? "Overbought zone" : "Neutral zone";
+
+  el("macd").textContent = "MACD: " + data.macd.toFixed(6);
+  el("macdSignal").textContent = "Signal: " + data.signal.toFixed(6);
+
+  const histEl = el("hist");
+  histEl.textContent = "Histogram: " + data.histogram.toFixed(6);
+  histEl.className = "macd " + (data.histogram >= 0 ? "green" : "red");
+
+  el("marketStatus").textContent =
+    `Running ${data.interval.toUpperCase()} candle: ${data.label} UTC`;
+
+  // These two monitoring systems work independently.
+  evaluateLevels(symbol, data, true);
+  detectSignal(symbol, data);
+}
+
+/* 9. SOUND */
+async function enableSound() {
+  const original = document.getElementById("buySound");
+  const summary = document.getElementById("summary");
+
+  if (testAudio) {
+    testAudio.pause();
+    testAudio.currentTime = 0;
+  }
+  testAudio = original.cloneNode(true);
+
+  try {
+    testAudio.currentTime = 0;
+    await testAudio.play();
+    soundEnabled = true;
+    summary.textContent = "Sound enabled · Monitoring alerts active";
+
+    const thisTest = testAudio;
+    setTimeout(() => {
+      thisTest.pause();
+      thisTest.currentTime = 0;
+    }, 100);
+  } catch (error) {
+    summary.textContent = "Test sound failed. Check audio URL or browser permissions.";
+  }
+}
+
+async function playSignalSound(type) {
+  if (!soundEnabled) return;
+  const audio = document.getElementById(type === "BUY" ? "buySound" : "sellSound");
+  try {
+    audio.pause();
+    audio.currentTime = 0;
+    await audio.play();
+  } catch (error) {
+    console.warn("Signal sound playback failed:", error);
+  }
+}
+
+/* 10. RSI + MACD ALERT HISTORY */
+function renderSignalFeed() {
+  const feed = document.getElementById("signalFeed");
+  if (!signalHistory.length) {
+    feed.innerHTML = '<div class="empty">No new trading signals detected yet.</div>';
+    return;
+  }
+
+  feed.replaceChildren();
+  signalHistory.forEach(item => {
+    const box = document.createElement("div");
+    box.className = "signal-item " + item.type.toLowerCase();
+
+    const title = document.createElement("div");
+    title.className = "signal-title";
+    title.textContent = `${item.type} · ${item.symbol} · ${item.interval.toUpperCase()}`;
+
+    const details = document.createElement("div");
+    details.className = "signal-details";
+    details.textContent =
+      `${item.date} UTC | Price: ${item.close} | ` +
+      `RSI: ${item.rsi.toFixed(2)} | ` +
+      `MACD: ${item.macd.toFixed(6)} | ` +
+      `Signal: ${item.signal.toFixed(6)}`;
+
+    box.append(title, details);
+    feed.appendChild(box);
+  });
+}
+
+/* 11. REFRESH ALL MARKETS
+   A timeframe switch calls refreshAll(true), which supersedes any refresh
+   still running: results from the old timeframe are discarded. */
+async function refreshAll(force = false) {
+  if (refreshInProgress && !force) return;
+
+  const token = ++refreshToken;
+  const interval = CONFIG.interval;
+  refreshInProgress = true;
+
+  const button = document.getElementById("refresh");
+  const summary = document.getElementById("summary");
+
+  button.disabled = true;
+  summary.textContent = `Updating ${interval.toUpperCase()} market data...`;
+
+  let successful = 0;
+
+  try {
+    for (const symbol of CONFIG.symbols) {
+      try {
+        const data = await fetchMarket(symbol, interval);
+        if (token !== refreshToken) return;
+
+        document.getElementById(`rsiState-${symbol}`).classList.remove("error");
+        showMarket(symbol, data);
+        successful++;
+      } catch (error) {
+        if (token !== refreshToken) return;
+
+        document.getElementById(`price-${symbol}`).textContent = "--";
+        document.getElementById(`rsi-${symbol}`).textContent = "--";
+
+        const state = document.getElementById(`rsiState-${symbol}`);
+        state.textContent = "Unavailable: " + error.message;
+        state.className = "status error";
+      }
+    }
+
+    summary.textContent =
+      `${successful}/${CONFIG.symbols.length} ${interval.toUpperCase()} markets loaded` +
+      (soundEnabled ? " · Sound ON" : " · Sound OFF");
+
+    document.getElementById("updated").textContent =
+      `Last refresh: ${new Date().toLocaleTimeString()}. ` +
+      `Automatic refresh every ${CONFIG.refreshMs / 1000} seconds. ` +
+      `Levels are saved locally in this browser.`;
+  } finally {
+    if (token === refreshToken) {
+      button.disabled = false;
+      refreshInProgress = false;
+    }
+  }
+}
+
+/* 12. TIMEFRAME BUTTONS (1D / 4H / 1H) */
+function setTimeframe(tf) {
+  if (!TIMEFRAMES.includes(tf) || tf === CONFIG.interval) return;
+
+  CONFIG.interval = tf;
+
+  document.querySelectorAll("button.tf").forEach(btn => {
+    const active = btn.dataset.tf === tf;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", active);
+  });
+  document.getElementById("tfLabel").textContent = tf.toUpperCase();
+
+  // Drop values from the previous timeframe, then reload everything.
+  Object.keys(marketCache).forEach(key => delete marketCache[key]);
+  createCards();
+  refreshAll(true);
+}
+
+/* 13. START */
+createCards();
+refreshAll();
+setInterval(() => refreshAll(), CONFIG.refreshMs);
+</script>
+</body>
+</html>
