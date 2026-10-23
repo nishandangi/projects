@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Crypto Market Monitoring Dashboard</title>
+<title>MS</title>
 <style>
 * { box-sizing: border-box; }
 body { margin: 0; padding: 22px; background: #10141c; color: #f2f4f8; font: 14px Arial, sans-serif; }
@@ -16,7 +16,7 @@ button { border: 0; border-radius: 7px; padding: 10px 14px; background: #3478f6;
 button:disabled { opacity: .55; }
 
 /* Timeframe buttons */
-.tf-group { display: flex; gap: 6px; }
+.tf-group { display: flex; flex-wrap: wrap; gap: 6px; }
 button.tf { padding: 9px 13px; background: #202a39; border: 1px solid #435168; color: #c2ccda; }
 button.tf.active { background: #3478f6; border-color: #3478f6; color: #fff; }
 
@@ -75,6 +75,8 @@ footer { color: #8e9bad; margin-top: 24px; font-size: 12px; line-height: 1.7; }
       <button class="tf active" data-tf="1d" aria-pressed="true" onclick="setTimeframe('1d')">1D</button>
       <button class="tf" data-tf="4h" aria-pressed="false" onclick="setTimeframe('4h')">4H</button>
       <button class="tf" data-tf="1h" aria-pressed="false" onclick="setTimeframe('1h')">1H</button>
+      <button class="tf" data-tf="15m" aria-pressed="false" onclick="setTimeframe('15m')">15m</button>
+      <button class="tf" data-tf="5m" aria-pressed="false" onclick="setTimeframe('5m')">5m</button>
     </span>
     <span id="summary" class="muted">Connecting...</span>
   </div>
@@ -132,12 +134,15 @@ const CONFIG = {
   macdFast: 12,
   macdSlow: 26,
   macdSignal: 9,
-  refreshMs: 60000,
+  refreshMs: { "1d": 60000, "4h": 60000, "1h": 60000, "15m": 30000, "5m": 15000 },   // auto-refresh per timeframe (ms)
   api: "https://fapi.binance.com/fapi/v1/klines",
   storageKey: "crypto_monitor_levels_v1"
 };
 
-const TIMEFRAMES = ["1d", "4h", "1h"];
+const TIMEFRAMES = ["1d", "4h", "1h", "15m", "5m"];
+
+// Display names follow Binance's chart style: 1D, 4H, 1H, 15m, 5m.
+const tfName = tf => (tf.endsWith("m") ? tf : tf.toUpperCase());
 
 let soundEnabled = false;
 let signalHistory = [];
@@ -150,6 +155,7 @@ let popupTimer = null;
 let testAudio = null;
 let refreshInProgress = false;
 let refreshToken = 0;
+let refreshTimer = null;
 
 /* 2. LOCAL STORAGE: SUPPORT / RESISTANCE (shared by all timeframes) */
 function loadLevels() {
@@ -258,7 +264,7 @@ function createCards() {
       return `
       <article class="card" id="card-${symbol}">
         <div class="symbol">${symbol.replace("USDT", "")}/USDT</div>
-        <div class="muted">Binance perpetual · Running ${CONFIG.interval.toUpperCase()} candle</div>
+        <div class="muted">Binance perpetual · Running ${tfName(CONFIG.interval)} candle</div>
 
         <div class="label">Current candle price</div>
         <div class="price" id="price-${symbol}">--</div>
@@ -507,7 +513,7 @@ function detectSignal(symbol, data) {
 function showSignalPopup(item) {
   showPopup(
     item.type.toLowerCase(),
-    `${item.type === "BUY" ? "BUY SIGNAL" : "SELL SIGNAL"} — ${item.symbol} (${item.interval.toUpperCase()})`,
+    `${item.type === "BUY" ? "BUY SIGNAL" : "SELL SIGNAL"} — ${item.symbol} (${tfName(item.interval)})`,
     `Candle: ${item.date} UTC\n` +
     `Price: ${item.close}\n` +
     `RSI(14): ${item.rsi.toFixed(2)}\n` +
@@ -542,7 +548,7 @@ function showMarket(symbol, data) {
   histEl.className = "macd " + (data.histogram >= 0 ? "green" : "red");
 
   el("marketStatus").textContent =
-    `Running ${data.interval.toUpperCase()} candle: ${data.label} UTC`;
+    `Running ${tfName(data.interval)} candle: ${data.label} UTC`;
 
   // These two monitoring systems work independently.
   evaluateLevels(symbol, data, true);
@@ -603,7 +609,7 @@ function renderSignalFeed() {
 
     const title = document.createElement("div");
     title.className = "signal-title";
-    title.textContent = `${item.type} · ${item.symbol} · ${item.interval.toUpperCase()}`;
+    title.textContent = `${item.type} · ${item.symbol} · ${tfName(item.interval)}`;
 
     const details = document.createElement("div");
     details.className = "signal-details";
@@ -632,7 +638,7 @@ async function refreshAll(force = false) {
   const summary = document.getElementById("summary");
 
   button.disabled = true;
-  summary.textContent = `Updating ${interval.toUpperCase()} market data...`;
+  summary.textContent = `Updating ${tfName(interval)} market data...`;
 
   let successful = 0;
 
@@ -658,12 +664,12 @@ async function refreshAll(force = false) {
     }
 
     summary.textContent =
-      `${successful}/${CONFIG.symbols.length} ${interval.toUpperCase()} markets loaded` +
+      `${successful}/${CONFIG.symbols.length} ${tfName(interval)} markets loaded` +
       (soundEnabled ? " · Sound ON" : " · Sound OFF");
 
     document.getElementById("updated").textContent =
       `Last refresh: ${new Date().toLocaleTimeString()}. ` +
-      `Automatic refresh every ${CONFIG.refreshMs / 1000} seconds. ` +
+      `Automatic refresh every ${CONFIG.refreshMs[interval] / 1000} seconds. ` +
       `Levels are saved locally in this browser.`;
   } finally {
     if (token === refreshToken) {
@@ -673,7 +679,13 @@ async function refreshAll(force = false) {
   }
 }
 
-/* 12. TIMEFRAME BUTTONS (1D / 4H / 1H) */
+/* 12. TIMEFRAME BUTTONS (1D / 4H / 1H / 15m / 5m) */
+// Poll faster on short timeframes (see CONFIG.refreshMs).
+function scheduleRefresh() {
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => refreshAll(), CONFIG.refreshMs[CONFIG.interval]);
+}
+
 function setTimeframe(tf) {
   if (!TIMEFRAMES.includes(tf) || tf === CONFIG.interval) return;
 
@@ -684,18 +696,19 @@ function setTimeframe(tf) {
     btn.classList.toggle("active", active);
     btn.setAttribute("aria-pressed", active);
   });
-  document.getElementById("tfLabel").textContent = tf.toUpperCase();
+  document.getElementById("tfLabel").textContent = tfName(tf);
 
   // Drop values from the previous timeframe, then reload everything.
   Object.keys(marketCache).forEach(key => delete marketCache[key]);
   createCards();
+  scheduleRefresh();
   refreshAll(true);
 }
 
 /* 13. START */
 createCards();
 refreshAll();
-setInterval(() => refreshAll(), CONFIG.refreshMs);
+scheduleRefresh();
 </script>
 </body>
 </html>
