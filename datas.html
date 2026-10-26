@@ -1,176 +1,372 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>datas</title>
+<title>candle</title>
 <style>
-body {
-  background: #10151e;
-  color: #eee;
-  font: 13px Arial, sans-serif;
-  padding: 15px;
+:root{
+  --bg:#101826; --panel:#182235; --line:#263248; --text:#e6ebf5; --muted:#8b97ad;
+  --up:#2ebd85; --dn:#f6465d; --accent:#f0b90b;
+  color-scheme:dark;
 }
-h2 { color: #f0b90b; }
-#status { color: #aaa; margin: 12px 0; }
-.wrap {
-  overflow: auto;
-  max-height: 82vh;
-  border: 1px solid #343e4e;
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px}
+h1{font-size:20px;margin:0 0 4px;font-weight:650}
+.sub{color:var(--muted);margin:0 0 14px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+button{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:#1a1500;border-color:var(--accent);font-weight:600}
+button.danger{color:var(--dn);border-color:var(--dn)}
+button.danger:hover{background:rgba(246,70,93,.12)}
+#state{color:var(--muted)}
+#state.err{color:var(--dn)}
+.layout{display:flex;gap:16px;align-items:flex-start}
+.wrap{flex:1 1 0;min-width:0;overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+.side{flex:0 0 35%;min-width:220px;position:sticky;top:16px}
+.side-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.side-head h2{margin:0}
+.side-head button{padding:4px 10px;font-size:13px}
+@media (max-width:900px){
+  .layout{flex-direction:column}
+  .side{flex:none;width:100%;position:static}
 }
-table {
-  border-collapse: collapse;
-  white-space: nowrap;
-  width: max-content;
-  min-width: 100%;
-}
-th, td {
-  border: 1px solid #303a49;
-  padding: 9px 12px;
-  text-align: right;
-}
-th {
-  background: #252f40;
-  position: sticky;
-  top: 0;
-  z-index: 2;
-}
-th:first-child, td:first-child {
-  position: sticky;
-  left: 0;
-  text-align: left;
-  background: #1b2432;
-  z-index: 1;
-  font-weight: bold;
-}
-th:first-child { z-index: 3; }
-button {
-  background: #f0b90b;
-  border: 0;
-  padding: 9px 14px;
-  cursor: pointer;
-  font-weight: bold;
-}
+table{border-collapse:collapse;width:100%;min-width:860px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;font-variant-numeric:tabular-nums}
+th{color:var(--muted);font-weight:500;background:var(--panel);position:sticky;top:0}
+tr:last-child td{border-bottom:0}
+.sym{font-weight:650}
+.price{font-size:15px;font-weight:600}
+.lab{display:flex;align-items:center;gap:6px;margin-bottom:2px;font-weight:600}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block}
+.g .dot{background:var(--up)} .g{color:var(--up)}
+.r .dot{background:var(--dn)} .r{color:var(--dn)}
+.lv{color:var(--muted)} .lv b{color:var(--text);font-weight:500}
+.lv b.hit-up{color:var(--up);font-weight:700}
+.lv b.hit-dn{color:var(--dn);font-weight:700}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.badge.up{color:var(--up);border-color:var(--up)}
+.badge.dn{color:var(--dn);border-color:var(--dn)}
+.badge.both{color:var(--accent);border-color:var(--accent)}
+.badge.warn{color:var(--accent)}
+.pos{color:var(--up)} .neg{color:var(--dn)}
+input.lvl{width:120px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;font-variant-numeric:tabular-nums}
+input.lvl::placeholder{color:var(--muted)}
+input.lvl:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input.lvl.hit-up{border-color:var(--up);color:var(--up)}
+input.lvl.hit-dn{border-color:var(--dn);color:var(--dn)}
+tr.flash-up{animation:fu 3s ease-out}
+tr.flash-dn{animation:fd 3s ease-out}
+@keyframes fu{0%,30%{background:rgba(46,189,133,.28)}100%{background:transparent}}
+@keyframes fd{0%,30%{background:rgba(246,70,93,.28)}100%{background:transparent}}
+@media (prefers-reduced-motion:reduce){tr.flash-up,tr.flash-dn{animation:none}}
+h2{font-size:15px;margin:20px 0 8px;font-weight:600}
+#log{list-style:none;margin:0;padding:0;max-height:calc(100vh - 80px);overflow:auto;border:1px solid var(--line);border-radius:8px}
+#log li{padding:7px 12px;border-bottom:1px solid var(--line)}
+#log li:last-child{border-bottom:0}
+#log .empty{color:var(--muted)}
+#log time{color:var(--muted);margin-right:8px}
 </style>
 </head>
 <body>
+<audio id="buySound" src="https://nishandangi.com.np/resources/audio/bsignal.mp3" preload="auto"></audio>
+<audio id="sellSound" src="https://nishandangi.com.np/resources/audio/ssignal.mp3" preload="auto"></audio>
 
-<h2>Binance Futures — 4H Closing Prices</h2>
-<div id="status">Loading market data...</div>
-<button onclick="loadData()">Refresh Now</button>
+<div class="bar">
+  <button class="primary" id="enableBtn">Enable sound and notifications</button>
+  <button id="testBuy" disabled>Test buy sound</button>
+  <button id="testSell" disabled>Test sell sound</button>
+  <button id="resetLevels" class="danger" type="button">Reset all support / resistance</button>
+  <span id="state">Loading…</span>
+</div>
 
+<div class="layout">
 <div class="wrap">
-<table id="prices">
-  <thead></thead>
-  <tbody></tbody>
+<table>
+  <thead><tr>
+    <th>Symbol</th><th>Price</th><th>Yesterday (closed)</th><th>Today (running)</th><th>Status</th><th>Support</th><th>Resistance</th>
+  </tr></thead>
+  <tbody id="rows"></tbody>
 </table>
 </div>
 
+<aside class="side">
+<div class="side-head">
+  <h2>Alert log</h2>
+  <button id="clearLog" type="button">Reset</button>
+</div>
+<ul id="log"><li class="empty">No alerts yet.</li></ul>
+</aside>
+</div>
+
 <script>
-const symbols = [
-  "BTCUSDT", "ETHUSDT", "XRPUSDT", "HYPEUSDT",
-  "ZECUSDT", "SOLUSDT", "BNBUSDT", "TRXUSDT",
-  "XMRUSDT", "DOGEUSDT", "LSKUSDT", "BTWUSDT",
-  "TLMUSDT", "APTUSDT"
-];
+const CFG = {
+  symbols: [  "BTCUSDT","HYPEUSDT", "ZECUSDT","BTWUSDT","ETHUSDT","XRPUSDT","SOLUSDT","BNBUSDT","TRXUSDT","XMRUSDT","DOGEUSDT","LSKUSDT", "TLMUSDT","APTUSDT" ],
 
-const API = "https://fapi.binance.com/fapi/v1/klines";
-const LIMIT = 50;
-let busy = false;
+  interval: "1d",
+  candleLimit: 2,          // [0] = previous closed candle, [1] = running candle
+  pollMs: 5000,
+  timeoutMs: 4000,
+  api: "https://fapi.binance.com/fapi/v1/klines",
+  storageKey: "candle.levels.v1"
+};
 
-function formatDate(timestamp) {
-  const d = new Date(Number(timestamp));
-  return `${String(d.getUTCMonth() + 1).padStart(2, "0")}/` +
-         `${String(d.getUTCDate()).padStart(2, "0")}/` +
-         `${d.getUTCFullYear()} ` +
-         `${String(d.getUTCHours()).padStart(2, "0")}:00`;
+const $ = id => document.getElementById(id);
+const store = {};          // per-symbol alert state
+let soundOn = false;
+
+/* ---------- saved support / resistance levels ---------- */
+let levels = {};           // { BTCUSDT: { s: "60000", r: "70000" } }
+try{ levels = JSON.parse(localStorage.getItem(CFG.storageKey)) || {}; }catch(e){ levels = {}; }
+function saveLevels(){
+  try{ localStorage.setItem(CFG.storageKey, JSON.stringify(levels)); }catch(e){}
+}
+function level(sym, kind){
+  const v = parseFloat((levels[sym] || {})[kind]);
+  return Number.isFinite(v) && v > 0 ? v : null;
 }
 
-function formatPrice(value) {
-  return Number(value).toLocaleString("en-US", {
-    useGrouping: false,
-    maximumFractionDigits: 8
+/* ---------- saved alert log ---------- */
+const LOG_KEY = "candle.alerts.v1", LOG_MAX = 50;
+let alerts = [];           // newest first: { t: ms, up: bool, msg: text }
+try{
+  const a = JSON.parse(localStorage.getItem(LOG_KEY));
+  if(Array.isArray(a)) alerts = a.slice(0, LOG_MAX);
+}catch(e){ alerts = []; }
+function saveAlerts(){
+  try{ localStorage.setItem(LOG_KEY, JSON.stringify(alerts)); }catch(e){}
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function stamp(ms){
+  const d = new Date(ms);
+  return d.toDateString() === new Date().toDateString()
+    ? d.toLocaleTimeString()
+    : d.toLocaleDateString([], {month:"short", day:"numeric"}) + " " + d.toLocaleTimeString();
+}
+function renderLog(){
+  $("log").innerHTML = alerts.length
+    ? alerts.map(a => `<li><time>${stamp(a.t)}</time><span class="${a.up ? "pos" : "neg"}">${a.up ? "▲" : "▼"}</span> ${esc(a.msg)}</li>`).join("")
+    : `<li class="empty">No alerts yet.</li>`;
+}
+function addAlert(up, msg){
+  alerts.unshift({ t: Date.now(), up, msg });
+  if(alerts.length > LOG_MAX) alerts.length = LOG_MAX;
+  saveAlerts();
+  renderLog();
+}
+$("clearLog").addEventListener("click", () => {
+  alerts = [];
+  saveAlerts();
+  renderLog();
+});
+renderLog();
+
+/* ---------- build rows once ---------- */
+function levelInput(sym, kind, label){
+  const saved = (levels[sym] || {})[kind];
+  const v = saved === undefined ? "" : String(saved).replace(/"/g, "&quot;");
+  return `<td><input class="lvl" type="number" step="any" min="0" inputmode="decimal"
+    data-sym="${sym}" data-kind="${kind}" placeholder="${label}"
+    aria-label="${sym.replace("USDT","")} ${label.toLowerCase()}" value="${v}"></td>`;
+}
+$("rows").innerHTML = CFG.symbols.map(s =>
+  `<tr id="r-${s}"><td class="sym">${s.replace("USDT","")}<span class="lv">/USDT</span></td>
+   <td class="price">–</td><td>–</td><td>–</td><td><span class="badge">Loading</span></td>
+   ${levelInput(s, "s", "Support")}${levelInput(s, "r", "Resistance")}</tr>`
+).join("");
+
+/* save on every keystroke */
+$("rows").addEventListener("input", e => {
+  const t = e.target;
+  if(!t.classList.contains("lvl")) return;
+  const sym = t.dataset.sym, kind = t.dataset.kind;
+  const o = levels[sym] || (levels[sym] = {});
+  if(t.value === "") delete o[kind]; else o[kind] = t.value;
+  if(!Object.keys(o).length) delete levels[sym];
+  saveLevels();
+  // re-seed silently so a newly typed level never fires an alert by itself
+  const s = store[sym];
+  if(s){ if(kind === "s") s.belowS = null; else s.aboveR = null; }
+  styleLevels(sym);
+});
+
+/* one button clears every support / resistance value */
+$("resetLevels").addEventListener("click", () => {
+  if(!Object.keys(levels).length) return;
+  if(!confirm("Clear all support and resistance values?")) return;
+  levels = {};
+  saveLevels();
+  document.querySelectorAll("input.lvl").forEach(i => {
+    i.value = "";
+    i.classList.remove("hit-up", "hit-dn");
   });
+  for(const sym in store){ store[sym].aboveR = store[sym].belowS = null; }
+});
+
+/* ---------- helpers ---------- */
+const fmt = v => v >= 1000 ? v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})
+              : v >= 1 ? v.toFixed(4) : v.toFixed(6);
+const candle = k => ({ t:k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4] });
+const clock = () => new Date().toLocaleTimeString();
+
+function candleCell(c, hitUp, hitDn){
+  const green = c.c >= c.o;
+  return `<div class="lab ${green ? "g" : "r"}"><i class="dot"></i><span>${green ? "Green" : "Red"}</span></div>
+    <div class="lv">High <b class="${hitUp ? "hit-up" : ""}">${fmt(c.h)}</b></div>
+    <div class="lv">Low <b class="${hitDn ? "hit-dn" : ""}">${fmt(c.l)}</b></div>`;
 }
 
-async function loadData() {
-  if (busy) return;
-  busy = true;
-  document.getElementById("status").textContent = "Fetching closing prices...";
+/* highlight an input once price is beyond its level */
+function styleLevels(sym){
+  const s = store[sym];
+  const row = $("r-" + sym);
+  if(!row) return;
+  const iS = row.querySelector('input[data-kind="s"]');
+  const iR = row.querySelector('input[data-kind="r"]');
+  const S = level(sym, "s"), R = level(sym, "r");
+  const p = s && s.price;
+  iS.classList.toggle("hit-dn", p != null && S != null && p < S);
+  iR.classList.toggle("hit-up", p != null && R != null && p > R);
+}
 
-  try {
-    const results = await Promise.all(symbols.map(async symbol => {
-      try {
-        const url = `${API}?symbol=${symbol}&interval=4h&limit=${LIMIT}`;
-        const response = await fetch(url);
-        const data = await response.json();
+/* ---------- data ---------- */
+async function getKlines(sym){
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), CFG.timeoutMs);
+  try{
+    const r = await fetch(`${CFG.api}?symbol=${sym}&interval=${CFG.interval}&limit=${CFG.candleLimit}`, {signal: ctl.signal});
+    const d = await r.json();
+    if(!Array.isArray(d)) throw new Error(d && d.msg ? d.msg : "Bad response");
+    return d;
+  } finally { clearTimeout(timer); }
+}
 
-        if (!response.ok || !Array.isArray(data)) {
-          throw new Error(data.msg || "API error");
-        }
+/* ---------- alerts ---------- */
+function play(id){
+  if(!soundOn) return;
+  const a = $(id);
+  a.currentTime = 0;
+  a.play().catch(() => {});
+}
 
-        return { symbol, data, error: false };
-      } catch (error) {
-        return { symbol, data: [], error: true, message: error.message };
-      }
-    }));
+/* up = true  -> buy sound  (broke a high / resistance)
+   up = false -> sell sound (broke a low / support)   */
+function notify(sym, up, msg, tag){
+  play(up ? "buySound" : "sellSound");
 
-    // Use the latest 50 unique candle opening timestamps across all pairs.
-    const timestamps = [...new Set(
-      results.flatMap(r => r.data.map(c => Number(c[0])))
-    )].sort((a, b) => b - a).slice(0, LIMIT);
+  const row = $("r-" + sym);
+  row.classList.remove("flash-up","flash-dn");
+  void row.offsetWidth;                       // restart animation
+  row.classList.add(up ? "flash-up" : "flash-dn");
 
-    const thead = document.querySelector("#prices thead");
-    const tbody = document.querySelector("#prices tbody");
-    thead.replaceChildren();
-    tbody.replaceChildren();
+  addAlert(up, msg);
 
-    const header = document.createElement("tr");
-    ["Pair / Date", ...timestamps.map(formatDate)].forEach(label => {
-      const th = document.createElement("th");
-      th.textContent = label;
-      header.appendChild(th);
-    });
-    thead.appendChild(header);
-
-    results.forEach(result => {
-      const tr = document.createElement("tr");
-
-      const name = document.createElement("td");
-      name.textContent = result.symbol;
-      tr.appendChild(name);
-
-      const closeByTime = new Map(
-        result.data.map(c => [Number(c[0]), c[4]])
-      );
-
-      timestamps.forEach(timestamp => {
-        const td = document.createElement("td");
-        const close = closeByTime.get(timestamp);
-        td.textContent = close === undefined ? "—" : formatPrice(close);
-        tr.appendChild(td);
-      });
-
-      tbody.appendChild(tr);
-    });
-
-    const success = results.filter(r => !r.error).length;
-    document.getElementById("status").textContent =
-      `Updated ${new Date().toLocaleString()} | ` +
-      `${success}/${symbols.length} pairs loaded | ` +
-      `50 latest 4H candles where available | Times in UTC`;
-
-  } catch (error) {
-    document.getElementById("status").textContent =
-      "Unable to load data. Check your connection and try again.";
-  } finally {
-    busy = false;
+  if("Notification" in window && Notification.permission === "granted"){
+    new Notification(up ? "Breakout" : "Breakdown", { body: msg, tag: sym + tag });
   }
 }
 
-loadData();
-setInterval(loadData, 60000);
+function alertFor(sym, dir, level, now){
+  const up = dir === "up";
+  const name = sym.replace("USDT","");
+  const msg = up
+    ? `${name} broke above yesterday's high ${fmt(level)} (today's high ${fmt(now)})`
+    : `${name} broke below yesterday's low ${fmt(level)} (today's low ${fmt(now)})`;
+  notify(sym, up, msg, dir);
+}
+
+function alertLevel(sym, kind, lvl, price){
+  const name = sym.replace("USDT","");
+  if(kind === "r") notify(sym, true,  `${name} broke above resistance ${fmt(lvl)} (price ${fmt(price)})`, "res");
+  else             notify(sym, false, `${name} broke below support ${fmt(lvl)} (price ${fmt(price)})`, "sup");
+}
+
+/* ---------- update one symbol ---------- */
+function update(sym, d){
+  const row = $("r-" + sym);
+  if(d.length < 2){
+    row.children[4].innerHTML = `<span class="badge warn">Needs 2 daily candles</span>`;
+    return;
+  }
+  const p = candle(d[0]), c = candle(d[1]);
+  const s = store[sym] || (store[sym] = { day: c.t, up: false, down: false, seeded: false, aboveR: null, belowS: null, price: null });
+
+  if(s.day !== c.t){ s.day = c.t; s.up = s.down = false; }   // new day: reset flags
+
+  const up = c.h > p.h;     // wick above yesterday's high
+  const dn = c.l < p.l;     // wick below yesterday's low
+
+  if(up && !s.up){ s.up = true; if(s.seeded) alertFor(sym, "up", p.h, c.h); }
+  if(dn && !s.down){ s.down = true; if(s.seeded) alertFor(sym, "down", p.l, c.l); }
+  s.seeded = true;          // breaks already present on first load show, but stay silent
+
+  /* support / resistance: fire when price crosses the level, once per crossing.
+     null = not yet seeded (first load, or level just edited), so no alert. */
+  const R = level(sym, "r"), S = level(sym, "s");
+  s.price = c.c;
+  if(R !== null){
+    const above = c.c > R;
+    if(s.aboveR === false && above) alertLevel(sym, "r", R, c.c);
+    s.aboveR = above;
+  } else s.aboveR = null;
+  if(S !== null){
+    const below = c.c < S;
+    if(s.belowS === false && below) alertLevel(sym, "s", S, c.c);
+    s.belowS = below;
+  } else s.belowS = null;
+
+  const label = up && dn ? ["both","Broke both ▲▼"] : up ? ["up","Broke high ▲"] : dn ? ["dn","Broke low ▼"] : ["","Inside yesterday's range"];
+
+  row.children[1].textContent = fmt(c.c);
+  row.children[2].innerHTML = candleCell(p, false, false);
+  row.children[3].innerHTML = candleCell(c, up, dn);
+  row.children[4].innerHTML = `<span class="badge ${label[0]}">${label[1]}</span>`;
+  styleLevels(sym);         // inputs (children 5 and 6) are never re-rendered, so typing is not interrupted
+}
+
+function fail(sym, err){
+  const row = $("r-" + sym);
+  const msg = String(err && err.message || err);
+  const notListed = /invalid symbol/i.test(msg);
+  row.children[4].innerHTML = `<span class="badge warn">${notListed ? "Not listed on futures" : "Fetch failed, retrying"}</span>`;
+}
+
+/* ---------- poll loop (next poll starts after the last one ends) ---------- */
+async function poll(){
+  const res = await Promise.allSettled(CFG.symbols.map(getKlines));
+  let bad = 0;
+  res.forEach((r, i) => {
+    if(r.status === "fulfilled") update(CFG.symbols[i], r.value);
+    else { bad++; fail(CFG.symbols[i], r.reason); }
+  });
+  const st = $("state");
+  st.className = bad === res.length ? "err" : "";
+  st.textContent = bad === res.length
+    ? `Cannot reach Binance. Retrying every ${CFG.pollMs/1000}s`
+    : `Updated ${clock()} · every ${CFG.pollMs/1000}s${bad ? ` · ${bad} symbol(s) unavailable` : ""}${soundOn ? "" : " · sound off"}`;
+  setTimeout(poll, CFG.pollMs);
+}
+
+/* ---------- sound + notification unlock (browsers need a click) ---------- */
+$("enableBtn").addEventListener("click", async () => {
+  for(const id of ["buySound","sellSound"]){
+    const a = $(id);
+    a.muted = true;
+    try{ await a.play(); a.pause(); a.currentTime = 0; }catch(e){}
+    a.muted = false;
+  }
+  soundOn = true;
+  $("enableBtn").textContent = "Sound enabled";
+  $("enableBtn").classList.remove("primary");
+  $("testBuy").disabled = $("testSell").disabled = false;
+  if("Notification" in window && Notification.permission === "default") Notification.requestPermission();
+});
+$("testBuy").addEventListener("click", () => play("buySound"));
+$("testSell").addEventListener("click", () => play("sellSound"));
+
+poll();
 </script>
 </body>
 </html>
