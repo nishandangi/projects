@@ -6,38 +6,54 @@
 <title>candle</title>
 <style>
 :root{
-  --bg:#101826; --panel:#182235; --line:#263248; --text:#e6ebf5; --muted:#8b97ad;
+  --bg:#0b1220; --panel:rgba(20,30,50,.72); --panel2:rgba(28,40,64,.85); --line:rgba(120,140,180,.18); --text:#e6ebf5; --muted:#8b97ad;
   --up:#2ebd85; --dn:#f6465d; --accent:#f0b90b;
   color-scheme:dark;
 }
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px}
-h1{font-size:20px;margin:0 0 4px;font-weight:650}
-.sub{color:var(--muted);margin:0 0 14px}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{background:var(--bg)}
+body{padding:0;min-height:100vh;color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  background:radial-gradient(1200px 600px at 15% -10%,rgba(240,185,11,.08),transparent 60%),radial-gradient(900px 500px at 100% 0,rgba(46,189,133,.08),transparent 60%);}
+#bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background-size:cover;background-position:center;opacity:.55;
+  -webkit-mask-image:linear-gradient(to bottom,#000 30%,rgba(0,0,0,.5));mask-image:linear-gradient(to bottom,#000 30%,rgba(0,0,0,.5))}
 .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
-button{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font:inherit;cursor:pointer}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:2px 5px;font:inherit;cursor:pointer;transition:border-color .15s,background .15s}
 button:hover{border-color:var(--muted)}
+button:disabled{opacity:.45;cursor:default}
 button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button.primary{background:var(--accent);color:#1a1500;border-color:var(--accent);font-weight:600}
-button.danger{color:var(--dn);border-color:var(--dn)}
+button.danger{color:var(--dn);border-color:rgba(246,70,93,.6)}
 button.danger:hover{background:rgba(246,70,93,.12)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;border-radius:0;padding:7px 12px;color:var(--muted);background:transparent}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button:hover{color:var(--text)}
+.seg button:focus-visible{outline-offset:-3px}
+.seg button[aria-pressed="true"]{background:rgba(120,140,180,.18);color:var(--text);box-shadow:inset 0 -2px 0 var(--accent)}
 #state{color:var(--muted)}
 #state.err{color:var(--dn)}
 .layout{display:flex;gap:16px;align-items:flex-start}
-.wrap{flex:1 1 0;min-width:0;overflow-x:auto;border:1px solid var(--line);border-radius:8px}
-.side{flex:0 0 35%;min-width:220px;position:sticky;top:16px}
+.wrap{flex:1 1 0;min-width:0;overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.side{flex:0 0 20%;min-width:100px;position:sticky;top:16px}
 .side-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 .side-head h2{margin:0}
-.side-head button{padding:4px 10px;font-size:13px}
+.side-head button{padding:4px 4px;font-size:13px}
 @media (max-width:900px){
   .layout{flex-direction:column}
   .side{flex:none;width:100%;position:static}
 }
-table{border-collapse:collapse;width:100%;min-width:860px}
-th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;font-variant-numeric:tabular-nums}
-th{color:var(--muted);font-weight:500;background:var(--panel);position:sticky;top:0}
+table{border-collapse:collapse;width:100%;min-width:1150px}
+.flat{color:var(--muted)}
+.ext{color:var(--accent)}
+th,td{padding:4px 3px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;font-variant-numeric:tabular-nums}
+th{color:var(--muted);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.04em;background:var(--panel2);position:sticky;top:0}
+tbody tr{transition:background .15s}
+tbody tr:hover{background:rgba(120,140,180,.07)}
 tr:last-child td{border-bottom:0}
 .sym{font-weight:650}
+td.sym{min-width:150px}
+td.sym .price{margin:2px 0 4px}
+td.sym .status{font-weight:400}
 .price{font-size:15px;font-weight:600}
 .lab{display:flex;align-items:center;gap:6px;margin-bottom:2px;font-weight:600}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block}
@@ -46,35 +62,56 @@ tr:last-child td{border-bottom:0}
 .lv{color:var(--muted)} .lv b{color:var(--text);font-weight:500}
 .lv b.hit-up{color:var(--up);font-weight:700}
 .lv b.hit-dn{color:var(--dn);font-weight:700}
-.badge{display:inline-block;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.badge{display:inline-block;padding:2px 3px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
 .badge.up{color:var(--up);border-color:var(--up)}
 .badge.dn{color:var(--dn);border-color:var(--dn)}
 .badge.both{color:var(--accent);border-color:var(--accent)}
 .badge.warn{color:var(--accent)}
 .pos{color:var(--up)} .neg{color:var(--dn)}
-input.lvl{width:120px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;font-variant-numeric:tabular-nums}
+
+.sigsub{font-size:12px;color:var(--muted);margin-top:4px}
+.badge.strong{font-weight:700;background:rgba(255,255,255,.06)}
+
+/* support / resistance in one column */
+td.levels{min-width:190px}
+.lvrow{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.lvrow:last-child{margin-bottom:0}
+.lvrow .tag{flex:0 0 22px;height:22px;display:grid;place-items:center;border-radius:6px;font-size:11px;font-weight:700}
+.lvrow.res .tag{background:rgba(46,189,133,.15);color:var(--up)}
+.lvrow.sup .tag{background:rgba(246,70,93,.15);color:var(--dn)}
+input.lvl{flex:1;min-width:0;width:130px;background:rgba(8,14,26,.7);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font:inherit;font-variant-numeric:tabular-nums}
+.lvrow.res input.lvl:focus-visible{border-color:var(--up)}
+.lvrow.sup input.lvl:focus-visible{border-color:var(--dn)}
 input.lvl::placeholder{color:var(--muted)}
-input.lvl:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-input.lvl.hit-up{border-color:var(--up);color:var(--up)}
-input.lvl.hit-dn{border-color:var(--dn);color:var(--dn)}
+input.lvl:focus-visible{outline:none}
+input.lvl.hit-up{border-color:var(--up);color:var(--up);background:rgba(46,189,133,.1)}
+input.lvl.hit-dn{border-color:var(--dn);color:var(--dn);background:rgba(246,70,93,.1)}
+
 tr.flash-up{animation:fu 3s ease-out}
 tr.flash-dn{animation:fd 3s ease-out}
 @keyframes fu{0%,30%{background:rgba(46,189,133,.28)}100%{background:transparent}}
 @keyframes fd{0%,30%{background:rgba(246,70,93,.28)}100%{background:transparent}}
 @media (prefers-reduced-motion:reduce){tr.flash-up,tr.flash-dn{animation:none}}
 h2{font-size:15px;margin:20px 0 8px;font-weight:600}
-#log{list-style:none;margin:0;padding:0;max-height:calc(100vh - 80px);overflow:auto;border:1px solid var(--line);border-radius:8px}
-#log li{padding:7px 12px;border-bottom:1px solid var(--line)}
+#log{list-style:none;margin:0;padding:0;max-height:calc(100vh - 80px);overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#log li{padding:8px 10px;border-bottom:1px solid var(--line)}
 #log li:last-child{border-bottom:0}
 #log .empty{color:var(--muted)}
 #log time{color:var(--muted);margin-right:8px}
 </style>
 </head>
 <body>
+<div id="bg" aria-hidden="true"></div>
 <audio id="buySound" src="https://nishandangi.com.np/resources/audio/bsignal.mp3" preload="auto"></audio>
 <audio id="sellSound" src="https://nishandangi.com.np/resources/audio/ssignal.mp3" preload="auto"></audio>
 
 <div class="bar">
+  <div class="seg" id="intervals" role="group" aria-label="Candle interval">
+    <button type="button" data-iv="1d" aria-pressed="true">1d</button>
+    <button type="button" data-iv="4h" aria-pressed="false">4h</button>
+    <button type="button" data-iv="1h" aria-pressed="false">1h</button>
+    <button type="button" data-iv="15m" aria-pressed="false">15m</button>
+  </div>
   <button class="primary" id="enableBtn">Enable sound and notifications</button>
   <button id="testBuy" disabled>Test buy sound</button>
   <button id="testSell" disabled>Test sell sound</button>
@@ -86,7 +123,7 @@ h2{font-size:15px;margin:20px 0 8px;font-weight:600}
 <div class="wrap">
 <table>
   <thead><tr>
-    <th>Symbol</th><th>Price</th><th>Yesterday (closed)</th><th>Today (running)</th><th>Status</th><th>Support</th><th>Resistance</th>
+    <th>Symbol / Price / Status</th><th id="thPrev">Yesterday (closed)</th><th id="thCur">Today (running)</th><th title="Multi-timeframe score -100..+100 from trend, MACD and RSI (1d, 4h, 1h, 15m). Your support / resistance are not used.">Signal</th><th>Trend</th><th title="OB = 70 or more (overbought), OS = 30 or less (oversold)">RSI (14)</th><th>MACD / Signal (12,26,9)</th><th>Resistance / Support</th>
   </tr></thead>
   <tbody id="rows"></tbody>
 </table>
@@ -102,23 +139,58 @@ h2{font-size:15px;margin:20px 0 8px;font-weight:600}
 </div>
 
 <script>
+/* background: generated candlestick chart (inline SVG, no external image) */
+(function(){
+  const W = 1600, H = 900, n = 70, step = W / n;
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  let p = 480, g = "";
+  for(let i = 1; i < 8; i++) g += `<line x1="0" x2="${W}" y1="${i*H/8}" y2="${i*H/8}" stroke="#8aa0c8" stroke-opacity=".08"/>`;
+  for(let i = 1; i < 16; i++) g += `<line y1="0" y2="${H}" x1="${i*W/16}" x2="${i*W/16}" stroke="#8aa0c8" stroke-opacity=".05"/>`;
+  for(let i = 0; i < n; i++){
+    const o = p, c = Math.max(120, Math.min(780, o + (rnd() - .46) * 55));
+    const h = Math.max(o, c) + rnd() * 28, l = Math.min(o, c) - rnd() * 28;
+    const col = c >= o ? "#2ebd85" : "#f6465d", x = i * step + step / 2;
+    g += `<line x1="${x}" x2="${x}" y1="${l}" y2="${h}" stroke="${col}" stroke-width="2"/><rect x="${x - step*.32}" y="${Math.min(o,c)}" width="${step*.64}" height="${Math.max(3,Math.abs(c-o))}" fill="${col}"/>`;
+    p = c;
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice">${g}</svg>`;
+  document.getElementById("bg").style.backgroundImage = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
+})();
+
 const CFG = {
   symbols: [  "BTCUSDT","HYPEUSDT", "ZECUSDT","TLMUSDT","APTUSDT","XAUUSDT" ],
 
-  interval: "1d",
-  candleLimit: 2,          // [0] = previous closed candle, [1] = running candle
+  interval: "1d",          // default; the buttons switch it at runtime
+  candleLimit: 2,          // previous closed candle + running candle only (breakout check). RSI / MACD do not use this
   pollMs: 5000,
   timeoutMs: 4000,
   api: "https://fapi.binance.com/fapi/v1/klines",
-  storageKey: "candle.levels.v1"
+  storageKey: "candle.levels.v1",
+
+  trendIntervals: ["1d","4h","1h","15m"],  // RSI / MACD / trend are calculated for all of these
+  indLimit: 1000,          // candles per interval for RSI / MACD / trend (Binance max 1500, 300+ is already converged)
+  indTimeoutMs: 15000,     // the history download is bigger, so it gets a longer timeout
+  trendMs: 60000,          // history refresh; between refreshes the live price is applied to the running candle
+  adxLen: 14,              // ADX / DI period
+  rsiLen: 14,              // RSI period
+  macd: [12, 26, 9],       // MACD fast, slow, signal
+  adxMin: 20               // ADX below this = sideways
 };
 
 const $ = id => document.getElementById(id);
-const store = {};          // per-symbol alert state
+const store = {};
 let soundOn = false;
 
-/* ---------- saved support / resistance levels ---------- */
-let levels = {};           // { BTCUSDT: { s: "60000", r: "70000" } }
+const IVS = {
+  "1d": { prev: "Yesterday",   cur: "Today",      p: "yesterday's", c: "today's" },
+  "4h": { prev: "Previous 4h", cur: "Current 4h", p: "previous 4h", c: "current 4h" },
+  "1h": { prev: "Previous 1h", cur: "Current 1h", p: "previous 1h", c: "current 1h" },
+  "15m": { prev: "Previous 15m", cur: "Current 15m", p: "previous 15m", c: "current 15m" }
+};
+let iv = IVS[CFG.interval] ? CFG.interval : "1d";
+let gen = 0, pollTimer = null;
+
+let levels = {};
 try{ levels = JSON.parse(localStorage.getItem(CFG.storageKey)) || {}; }catch(e){ levels = {}; }
 function saveLevels(){
   try{ localStorage.setItem(CFG.storageKey, JSON.stringify(levels)); }catch(e){}
@@ -128,9 +200,8 @@ function level(sym, kind){
   return Number.isFinite(v) && v > 0 ? v : null;
 }
 
-/* ---------- saved alert log ---------- */
 const LOG_KEY = "candle.alerts.v1", LOG_MAX = 50;
-let alerts = [];           // newest first: { t: ms, up: bool, msg: text }
+let alerts = [];
 try{
   const a = JSON.parse(localStorage.getItem(LOG_KEY));
   if(Array.isArray(a)) alerts = a.slice(0, LOG_MAX);
@@ -163,21 +234,22 @@ $("clearLog").addEventListener("click", () => {
 });
 renderLog();
 
-/* ---------- build rows once ---------- */
 function levelInput(sym, kind, label){
   const saved = (levels[sym] || {})[kind];
   const v = saved === undefined ? "" : String(saved).replace(/"/g, "&quot;");
-  return `<td><input class="lvl" type="number" step="any" min="0" inputmode="decimal"
+  return `<label class="lvrow ${kind === "r" ? "res" : "sup"}"><span class="tag">${kind === "r" ? "R" : "S"}</span><input class="lvl" type="number" step="any" min="0" inputmode="decimal"
     data-sym="${sym}" data-kind="${kind}" placeholder="${label}"
-    aria-label="${sym.replace("USDT","")} ${label.toLowerCase()}" value="${v}"></td>`;
+    aria-label="${sym.replace("USDT","")} ${label.toLowerCase()}" value="${v}"></label>`;
 }
+
+/* columns: 0 = symbol / price / status, 1 = previous candle, 2 = current candle, then signal, trend, rsi, macd, levels */
 $("rows").innerHTML = CFG.symbols.map(s =>
-  `<tr id="r-${s}"><td class="sym">${s.replace("USDT","")}<span class="lv">/USDT</span></td>
-   <td class="price">–</td><td>–</td><td>–</td><td><span class="badge">Loading</span></td>
-   ${levelInput(s, "s", "Support")}${levelInput(s, "r", "Resistance")}</tr>`
+  `<tr id="r-${s}"><td class="sym"><div>${s.replace("USDT","")}<span class="lv">/USDT</span></div>
+   <div class="price">–</div><div class="status"><span class="badge">Loading</span></div></td>
+   <td>–</td><td>–</td><td class="sig"></td><td class="trend"></td><td class="rsi"></td><td class="macd"></td>
+   <td class="levels">${levelInput(s, "r", "Resistance")}${levelInput(s, "s", "Support")}</td></tr>`
 ).join("");
 
-/* save on every keystroke */
 $("rows").addEventListener("input", e => {
   const t = e.target;
   if(!t.classList.contains("lvl")) return;
@@ -186,13 +258,11 @@ $("rows").addEventListener("input", e => {
   if(t.value === "") delete o[kind]; else o[kind] = t.value;
   if(!Object.keys(o).length) delete levels[sym];
   saveLevels();
-  // re-seed silently so a newly typed level never fires an alert by itself
   const s = store[sym];
   if(s){ if(kind === "s") s.belowS = null; else s.aboveR = null; }
   styleLevels(sym);
 });
 
-/* one button clears every support / resistance value */
 $("resetLevels").addEventListener("click", () => {
   if(!Object.keys(levels).length) return;
   if(!confirm("Clear all support and resistance values?")) return;
@@ -205,7 +275,6 @@ $("resetLevels").addEventListener("click", () => {
   for(const sym in store){ store[sym].aboveR = store[sym].belowS = null; }
 });
 
-/* ---------- helpers ---------- */
 const fmt = v => v >= 1000 ? v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})
               : v >= 1 ? v.toFixed(4) : v.toFixed(6);
 const candle = k => ({ t:k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4] });
@@ -218,7 +287,6 @@ function candleCell(c, hitUp, hitDn){
     <div class="lv">Low <b class="${hitDn ? "hit-dn" : ""}">${fmt(c.l)}</b></div>`;
 }
 
-/* highlight an input once price is beyond its level */
 function styleLevels(sym){
   const s = store[sym];
   const row = $("r-" + sym);
@@ -231,19 +299,17 @@ function styleLevels(sym){
   iR.classList.toggle("hit-up", p != null && R != null && p > R);
 }
 
-/* ---------- data ---------- */
-async function getKlines(sym){
+async function getKlines(sym, interval, limit = CFG.candleLimit, ms = CFG.timeoutMs){
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), CFG.timeoutMs);
+  const timer = setTimeout(() => ctl.abort(), ms);
   try{
-    const r = await fetch(`${CFG.api}?symbol=${sym}&interval=${CFG.interval}&limit=${CFG.candleLimit}`, {signal: ctl.signal});
+    const r = await fetch(`${CFG.api}?symbol=${sym}&interval=${interval}&limit=${limit}`, {signal: ctl.signal});
     const d = await r.json();
     if(!Array.isArray(d)) throw new Error(d && d.msg ? d.msg : "Bad response");
     return d;
   } finally { clearTimeout(timer); }
 }
 
-/* ---------- alerts ---------- */
 function play(id){
   if(!soundOn) return;
   const a = $(id);
@@ -251,14 +317,13 @@ function play(id){
   a.play().catch(() => {});
 }
 
-/* up = true  -> buy sound  (broke a high / resistance)
-   up = false -> sell sound (broke a low / support)   */
+/* up = true -> buy sound (broke a high / resistance), up = false -> sell sound (broke a low / support) */
 function notify(sym, up, msg, tag){
   play(up ? "buySound" : "sellSound");
 
   const row = $("r-" + sym);
   row.classList.remove("flash-up","flash-dn");
-  void row.offsetWidth;                       // restart animation
+  void row.offsetWidth;
   row.classList.add(up ? "flash-up" : "flash-dn");
 
   addAlert(up, msg);
@@ -271,10 +336,11 @@ function notify(sym, up, msg, tag){
 function alertFor(sym, dir, level, now){
   const up = dir === "up";
   const name = sym.replace("USDT","");
+  const L = IVS[iv];
   const msg = up
-    ? `${name} broke above yesterday's high ${fmt(level)} (today's high ${fmt(now)})`
-    : `${name} broke below yesterday's low ${fmt(level)} (today's low ${fmt(now)})`;
-  notify(sym, up, msg, dir);
+    ? `${name} broke above ${L.p} high ${fmt(level)} (${L.c} high ${fmt(now)})`
+    : `${name} broke below ${L.p} low ${fmt(level)} (${L.c} low ${fmt(now)})`;
+  notify(sym, up, msg, dir + iv);
 }
 
 function alertLevel(sym, kind, lvl, price){
@@ -283,29 +349,28 @@ function alertLevel(sym, kind, lvl, price){
   else             notify(sym, false, `${name} broke below support ${fmt(lvl)} (price ${fmt(price)})`, "sup");
 }
 
-/* ---------- update one symbol ---------- */
 function update(sym, d){
   const row = $("r-" + sym);
   if(d.length < 2){
-    row.children[4].innerHTML = `<span class="badge warn">Needs 2 daily candles</span>`;
+    row.querySelector(".status").innerHTML = `<span class="badge warn">Needs 2 ${iv} candles</span>`;
     return;
   }
   const p = candle(d[0]), c = candle(d[1]);
   const s = store[sym] || (store[sym] = { day: c.t, up: false, down: false, seeded: false, aboveR: null, belowS: null, price: null });
 
-  if(s.day !== c.t){ s.day = c.t; s.up = s.down = false; }   // new day: reset flags
+  if(s.day !== c.t){ s.day = c.t; s.up = s.down = false; }
 
-  const up = c.h > p.h;     // wick above yesterday's high
-  const dn = c.l < p.l;     // wick below yesterday's low
+  const up = c.h > p.h;
+  const dn = c.l < p.l;
 
   if(up && !s.up){ s.up = true; if(s.seeded) alertFor(sym, "up", p.h, c.h); }
   if(dn && !s.down){ s.down = true; if(s.seeded) alertFor(sym, "down", p.l, c.l); }
-  s.seeded = true;          // breaks already present on first load show, but stay silent
+  s.seeded = true;
 
-  /* support / resistance: fire when price crosses the level, once per crossing.
-     null = not yet seeded (first load, or level just edited), so no alert. */
+  /* support / resistance: fire once per crossing; null = not yet seeded, so no alert */
   const R = level(sym, "r"), S = level(sym, "s");
   s.price = c.c;
+  liveInds(sym, c.c);
   if(R !== null){
     const above = c.c > R;
     if(s.aboveR === false && above) alertLevel(sym, "r", R, c.c);
@@ -317,25 +382,26 @@ function update(sym, d){
     s.belowS = below;
   } else s.belowS = null;
 
-  const label = up && dn ? ["both","Broke both ▲▼"] : up ? ["up","Broke high ▲"] : dn ? ["dn","Broke low ▼"] : ["","Inside yesterday's range"];
+  const label = up && dn ? ["both","Broke both ▲▼"] : up ? ["up","Broke high ▲"] : dn ? ["dn","Broke low ▼"] : ["","Inside " + IVS[iv].p + " range"];
 
-  row.children[1].textContent = fmt(c.c);
-  row.children[2].innerHTML = candleCell(p, false, false);
-  row.children[3].innerHTML = candleCell(c, up, dn);
-  row.children[4].innerHTML = `<span class="badge ${label[0]}">${label[1]}</span>`;
-  styleLevels(sym);         // inputs (children 5 and 6) are never re-rendered, so typing is not interrupted
+  row.querySelector(".price").textContent = fmt(c.c);
+  row.children[1].innerHTML = candleCell(p, false, false);
+  row.children[2].innerHTML = candleCell(c, up, dn);
+  row.querySelector(".status").innerHTML = `<span class="badge ${label[0]}">${label[1]}</span>`;
+  styleLevels(sym);
 }
 
 function fail(sym, err){
   const row = $("r-" + sym);
   const msg = String(err && err.message || err);
   const notListed = /invalid symbol/i.test(msg);
-  row.children[4].innerHTML = `<span class="badge warn">${notListed ? "Not listed on futures" : "Fetch failed, retrying"}</span>`;
+  row.querySelector(".status").innerHTML = `<span class="badge warn">${notListed ? "Not listed on futures" : "Fetch failed, retrying"}</span>`;
 }
 
-/* ---------- poll loop (next poll starts after the last one ends) ---------- */
 async function poll(){
-  const res = await Promise.allSettled(CFG.symbols.map(getKlines));
+  const my = gen, ivNow = iv;
+  const res = await Promise.allSettled(CFG.symbols.map(s => getKlines(s, ivNow)));
+  if(my !== gen) return;
   let bad = 0;
   res.forEach((r, i) => {
     if(r.status === "fulfilled") update(CFG.symbols[i], r.value);
@@ -345,11 +411,197 @@ async function poll(){
   st.className = bad === res.length ? "err" : "";
   st.textContent = bad === res.length
     ? `Cannot reach Binance. Retrying every ${CFG.pollMs/1000}s`
-    : `Updated ${clock()} · every ${CFG.pollMs/1000}s${bad ? ` · ${bad} symbol(s) unavailable` : ""}${soundOn ? "" : " · sound off"}`;
-  setTimeout(poll, CFG.pollMs);
+    : `Updated ${clock()} · ${ivNow} · every ${CFG.pollMs/1000}s${bad ? ` · ${bad} symbol(s) unavailable` : ""}${soundOn ? "" : " · sound off"}`;
+  pollTimer = setTimeout(poll, CFG.pollMs);
 }
 
-/* ---------- sound + notification unlock (browsers need a click) ---------- */
+/* ADX / DI on closed candles: ADX below CFG.adxMin = sideways, otherwise +DI > -DI = uptrend, else downtrend */
+function dmi(k, n){
+  if(k.length < 3 * n) return null;
+  let tr = 0, pdm = 0, mdm = 0, adx = 0, cnt = 0, pdi = 0, mdi = 0;
+  for(let i = 1; i < k.length; i++){
+    const up = k[i].h - k[i-1].h, dn = k[i-1].l - k[i].l;
+    const t = Math.max(k[i].h - k[i].l, Math.abs(k[i].h - k[i-1].c), Math.abs(k[i].l - k[i-1].c));
+    const p = up > dn && up > 0 ? up : 0, m = dn > up && dn > 0 ? dn : 0;
+    if(i <= n){ tr += t; pdm += p; mdm += m; }
+    else { tr += t - tr / n; pdm += p - pdm / n; mdm += m - mdm / n; }
+    if(i >= n){
+      pdi = tr ? 100 * pdm / tr : 0; mdi = tr ? 100 * mdm / tr : 0;
+      const dx = 100 * Math.abs(pdi - mdi) / ((pdi + mdi) || 1);
+      if(cnt < n){ adx += dx / n; cnt++; }
+      else adx = (adx * (n - 1) + dx) / n;
+    }
+  }
+  return { adx, pdi, mdi };
+}
+
+const inds = {};
+
+function rsi(c, n){
+  if(c.length <= n) return null;
+  let g = 0, l = 0;
+  for(let i = 1; i <= n; i++){ const d = c[i] - c[i-1]; if(d > 0) g += d; else l -= d; }
+  g /= n; l /= n;
+  for(let i = n + 1; i < c.length; i++){
+    const d = c[i] - c[i-1];
+    g = (g * (n - 1) + (d > 0 ? d : 0)) / n;
+    l = (l * (n - 1) + (d < 0 ? -d : 0)) / n;
+  }
+  return l ? 100 - 100 / (1 + g / l) : (g ? 100 : 50);
+}
+
+/* standard EMA: seeded with the SMA of the first n values, like TradingView / Binance */
+function ema(a, n){
+  const k = 2 / (n + 1), out = [];
+  let e = 0;
+  for(let i = 0; i < n; i++) e += a[i] / n;
+  for(let i = 0; i < a.length; i++){
+    if(i < n - 1){ out.push(NaN); continue; }
+    if(i >= n) e += (a[i] - e) * k;
+    out.push(e);
+  }
+  return out;
+}
+
+function macd(c){
+  const [f, s, g] = CFG.macd;
+  if(c.length < s + g) return null;
+  const ef = ema(c, f), es = ema(c, s);
+  const m = es.map((v, i) => ef[i] - v).slice(s - 1);
+  const sg = ema(m, g), i = m.length - 1;
+  return { macd: m[i], sig: sg[i], hist: m[i] - sg[i] };
+}
+
+function num(v){
+  const a = Math.abs(v);
+  if(a >= 1000) return v.toLocaleString("en-US", {maximumFractionDigits: 1});
+  return v.toFixed(a ? Math.min(10, Math.max(0, 3 - Math.floor(Math.log10(a)))) : 0);
+}
+
+function drawInds(sym){
+  const o = inds[sym] || {}, row = $("r-" + sym);
+  const dash = i => `<div class="lab flat"><span class="lv">${i}</span><span>–</span></div>`;
+  row.querySelector(".rsi").innerHTML = CFG.trendIntervals.map(i => {
+    const v = o[i] && o[i].rsi;
+    if(v == null) return dash(i);
+    const tag = v >= 70 ? " OB" : v <= 30 ? " OS" : "";
+    return `<div class="lab${tag ? " ext" : ""}"><span class="lv">${i}</span><span>${v.toFixed(1)}${tag}</span></div>`;
+  }).join("");
+  row.querySelector(".macd").innerHTML = CFG.trendIntervals.map(i => {
+    const m = o[i] && o[i].macd;
+    if(!m) return dash(i);
+    const up = m.hist >= 0;
+    return `<div class="lab ${up ? "g" : "r"}" title="MACD ${num(m.macd)} · Signal ${num(m.sig)} · Histogram ${num(m.hist)}"><span class="lv">${i}</span><span>${num(m.macd)} / ${num(m.sig)} ${up ? "▲" : "▼"}</span></div>`;
+  }).join("");
+  computeSignal(sym);
+}
+
+/* between history refreshes, put the live price into the running candle so RSI / MACD follow the exchange chart */
+const MS = { "1d": 864e5, "4h": 144e5, "1h": 36e5, "15m": 9e5 };
+function liveInds(sym, price){
+  const o = inds[sym];
+  if(!o) return;
+  for(const i of CFG.trendIntervals){
+    const x = o[i];
+    if(!x || !x.cl || Date.now() >= x.t + MS[i]) continue;   // no history yet, or a new candle opened (next refresh fixes it)
+    const cl = x.cl.slice(0, -1); cl.push(price);
+    x.rsi = rsi(cl, CFG.rsiLen); x.macd = macd(cl);
+  }
+  drawInds(sym);
+}
+
+/* signal engine: score -100..+100 from trend (ADX), MACD and RSI on 1d / 4h / 1h / 15m.
+   Your support / resistance inputs are NOT used. 1d sets the bias, 15m is the early trigger. */
+const SIG = {
+  buy: 55, sell: -55, strong: 75, exit: 30,   // fire at +/-55, "strong" at +/-75, back to neutral inside +/-30
+  cooldownMs: 36e5,                            // same symbol + same direction: once per hour
+  w: { "1d":[15,8,0], "4h":[12,8,6], "1h":[8,8,6], "15m":[5,6,8] }   // [trend, macd, rsi] points
+};
+const sigs = {};
+function computeSignal(sym){
+  const o = inds[sym] || {}, t = trends[sym] || {}, cell = $("r-" + sym).querySelector(".sig");
+  let sc = 0, max = 0, ready = true;
+  const why = [];
+  for(const i of CFG.trendIntervals){
+    const [wt, wm, wr] = SIG.w[i], x = o[i], tr = t[i];
+    max += wt + wm + wr;
+    if(!x || !x.macd || x.rsi == null){ ready = false; continue; }
+    let a = 0;
+    if(tr && tr.t === "up") a += wt; else if(tr && tr.t === "down") a -= wt;
+    a += x.macd.hist >= 0 ? wm : -wm;
+    if(wr){ if(x.rsi > 50 && x.rsi < 70) a += wr; else if(x.rsi < 50 && x.rsi > 30) a -= wr; }
+    sc += a;
+    why.push(`${i}: ${tr ? TL[tr.t][1] : "–"}, MACD ${x.macd.hist >= 0 ? "▲" : "▼"}, RSI ${x.rsi.toFixed(0)} (${a > 0 ? "+" : ""}${a})`);
+  }
+  if(!ready){ cell.innerHTML = `<span class="badge">Loading</span>`; return; }
+
+  let score = sc / max * 100, notes = [];
+  const d1 = t["1d"], h4 = t["4h"];
+  if(d1 && h4 && d1.t === "side" && h4.t === "side"){ score *= .5; notes.push("sideways"); }
+  if(d1 && ((d1.t === "up" && score < 0) || (d1.t === "down" && score > 0))){ score *= .6; notes.push("counter-trend"); }
+  score = Math.round(score);
+
+  const s = sigs[sym] || (sigs[sym] = { state: 0, last: {}, seeded: false });
+  const m15 = o["15m"].macd.hist;                       // early trigger: 15m MACD must agree
+  let st = s.state;
+  if(score >= SIG.buy && m15 >= 0) st = 1;
+  else if(score <= SIG.sell && m15 < 0) st = -1;
+  else if((st === 1 && score < SIG.exit) || (st === -1 && score > -SIG.exit)) st = 0;
+
+  const hot = [o["1h"].rsi, o["15m"].rsi];
+  if(st === 1 && hot.some(r => r >= 70)) notes.push("late entry, RSI hot");
+  if(st === -1 && hot.some(r => r <= 30)) notes.push("late entry, RSI low");
+  const strong = Math.abs(score) >= SIG.strong;
+  const px = o["15m"].cl[o["15m"].cl.length - 1];
+
+  if(st !== s.state){
+    s.state = st;
+    if(st !== 0 && s.seeded && Date.now() - (s.last[st] || 0) > SIG.cooldownMs){
+      s.last[st] = Date.now();
+      const name = sym.replace("USDT", "");
+      notify(sym, st > 0, `${name} ${strong ? "STRONG " : ""}${st > 0 ? "BUY" : "SELL"} signal ${score > 0 ? "+" : ""}${score} · price ${fmt(px)}${notes.length ? " · " + notes.join(", ") : ""}`, "sig" + st);
+    }
+  }
+  s.seeded = true;
+
+  const cls = st > 0 ? "up" : st < 0 ? "dn" : "";
+  const word = st > 0 ? (strong ? "Strong BUY" : "BUY") : st < 0 ? (strong ? "Strong SELL" : "SELL") : "Neutral";
+  cell.innerHTML = `<span class="badge ${cls}${strong && st ? " strong" : ""}" title="${esc(why.join("\n"))}">${word} ${score > 0 ? "+" : ""}${score}</span>` +
+    (notes.length ? `<div class="sigsub">${esc(notes.join(" · "))}</div>` : "");
+}
+
+const trends = {};
+const TL = { up: ["g","Uptrend"], down: ["r","Downtrend"], side: ["flat","Sideways"] };
+function drawTrend(sym){
+  const o = trends[sym] || {};
+  $("r-" + sym).querySelector(".trend").innerHTML = CFG.trendIntervals.map(i => {
+    const x = o[i];
+    if(!x) return `<div class="lab flat"><i class="dot"></i><span class="lv">${i}</span><span>–</span></div>`;
+    const [cls, word] = TL[x.t];
+    return `<div class="lab ${cls}" title="ADX ${x.adx.toFixed(1)} · +DI ${x.pdi.toFixed(1)} · -DI ${x.mdi.toFixed(1)}"><i class="dot"></i><span class="lv">${i}</span><span>${word}</span></div>`;
+  }).join("");
+}
+async function trendPoll(){
+  const jobs = [];
+  CFG.symbols.forEach(sym => CFG.trendIntervals.forEach(i => jobs.push([sym, i])));
+  const res = await Promise.allSettled(jobs.map(([sym, i]) => getKlines(sym, i, CFG.indLimit, CFG.indTimeoutMs)));
+  res.forEach((r, n) => {
+    if(r.status !== "fulfilled") return;   // keep the last good value
+    const [sym, i] = jobs[n];
+    const all = r.value.map(candle);
+    if(!all.length) return;
+    const cl = all.map(x => x.c);          // RSI / MACD use every candle, running one included, like the exchange chart
+    (inds[sym] || (inds[sym] = {}))[i] = { rsi: rsi(cl, CFG.rsiLen), macd: macd(cl), cl, t: all[all.length - 1].t };
+    const d = dmi(all.slice(0, -1), CFG.adxLen);   // ADX drops the running candle
+    (trends[sym] || (trends[sym] = {}))[i] = d && { t: d.adx < CFG.adxMin ? "side" : d.pdi > d.mdi ? "up" : "down", ...d };
+  });
+  CFG.symbols.forEach(s => { drawTrend(s); drawInds(s); });
+  setTimeout(trendPoll, CFG.trendMs);
+}
+CFG.symbols.forEach(s => { drawTrend(s); drawInds(s); });
+trendPoll();
+
+/* sound + notification unlock (browsers need a click) */
 $("enableBtn").addEventListener("click", async () => {
   for(const id of ["buySound","sellSound"]){
     const a = $(id);
@@ -365,6 +617,37 @@ $("enableBtn").addEventListener("click", async () => {
 });
 $("testBuy").addEventListener("click", () => play("buySound"));
 $("testSell").addEventListener("click", () => play("sellSound"));
+
+function applyIv(){
+  const L = IVS[iv];
+  $("thPrev").textContent = `${L.prev} (closed)`;
+  $("thCur").textContent = `${L.cur} (running)`;
+  document.querySelectorAll("#intervals button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.iv === iv)));
+}
+function setIv(next){
+  if(next === iv || !IVS[next]) return;
+  iv = next; gen++;
+  clearTimeout(pollTimer);
+  for(const k in store) delete store[k];   // reseed silently: switching never fires an alert by itself
+  applyIv();
+  const st = $("state");
+  st.className = "";
+  st.textContent = `Loading ${iv}…`;
+  CFG.symbols.forEach(sym => {
+    const row = $("r-" + sym);
+    row.classList.remove("flash-up", "flash-dn");
+    row.querySelector(".price").textContent = "–";
+    row.children[1].textContent = row.children[2].textContent = "–";
+    row.querySelector(".status").innerHTML = `<span class="badge">Loading</span>`;
+    styleLevels(sym);
+  });
+  poll();
+}
+$("intervals").addEventListener("click", e => {
+  const b = e.target.closest("button[data-iv]");
+  if(b) setIv(b.dataset.iv);
+});
+applyIv();
 
 poll();
 </script>
