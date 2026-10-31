@@ -710,5 +710,129 @@ CFG.symbols.forEach(s => inds(s, true));
 connect();
 start();
 </script>
+<div id="world-clock">
+  <style>
+    #world-clock {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      z-index: 1000;
+      background: #111827;
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 12px 0 0 0;
+      font-family: Arial, sans-serif;
+      box-shadow: 0 0 15px rgba(0,0,0,0.25);
+      min-width: 190px;
+    }
+
+    #world-clock .clock-title {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #world-clock .clock-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+      padding: 5px 0;
+      border-bottom: 1px solid #374151;
+    }
+
+    #world-clock .clock-row:last-child {
+      border-bottom: none;
+    }
+
+    #world-clock .city {
+      font-size: 12px;
+      color: #d1d5db;
+    }
+
+    #world-clock .time {
+      font-size: 15px;
+      font-weight: bold;
+      font-variant-numeric: tabular-nums;
+      color: #38bdf8;
+    }
+
+    #world-clock .date {
+      font-size: 10px;
+      color: #9ca3af;
+      text-align: right;
+    }
+
+    @media (max-width: 600px) {
+      #world-clock {
+        min-width: 165px;
+        padding: 9px 12px;
+      }
+
+      #world-clock .time {
+        font-size: 13px;
+      }
+    }
+  </style>
+
+  <div class="clock-title">🌍 World Market Clock</div>
+
+  <div id="clock-list"></div>
+
+  <script>
+    (function () {
+      const zones = [
+        { name: "UTC", zone: "UTC" },
+        { name: "Nepal", zone: "Asia/Kathmandu" },
+        { name: "Asia / SG / HK", zone: "Asia/Singapore" },
+        { name: "Europe / CET", zone: "Europe/Paris" },
+        { name: "New York", zone: "America/New_York" }
+      ];
+
+      const container = document.getElementById("clock-list");
+
+      zones.forEach((item, index) => {
+        container.innerHTML += `
+          <div class="clock-row">
+            <div>
+              <div class="city">${item.name}</div>
+              <div class="date" id="date-${index}"></div>
+            </div>
+            <div class="time" id="time-${index}">--:--:--</div>
+          </div>
+        `;
+      });
+
+      function updateClocks() {
+        const now = new Date();
+
+        zones.forEach((item, index) => {
+          const time = new Intl.DateTimeFormat("en-GB", {
+            timeZone: item.zone,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false
+          }).format(now);
+
+          const date = new Intl.DateTimeFormat("en-GB", {
+            timeZone: item.zone,
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+          }).format(now);
+
+          document.getElementById(`time-${index}`).textContent = time;
+          document.getElementById(`date-${index}`).textContent = date;
+        });
+      }
+
+      updateClocks();
+      setInterval(updateClocks, 1000);
+    })();
+  </script>
+</div>
 </body>
 </html>
