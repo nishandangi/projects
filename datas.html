@@ -69,8 +69,14 @@ td.sym .status{font-weight:400}
 .badge.warn{color:var(--accent)}
 .pos{color:var(--up)} .neg{color:var(--dn)}
 
-.sigsub{font-size:12px;color:var(--muted);margin-top:4px}
 .badge.strong{font-weight:700;background:rgba(255,255,255,.06)}
+
+/* view matches / show all: only rows meeting the alert rule stay visible */
+#viewToggle[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+body.only-match #rows tr:not(.m-up):not(.m-dn){display:none}
+tr.m-up td.sym{box-shadow:inset 3px 0 0 var(--up)}
+tr.m-dn td.sym{box-shadow:inset 3px 0 0 var(--dn)}
+#noMatch{padding:14px 12px;color:var(--muted)}
 
 /* support / resistance in one column */
 td.levels{min-width:190px}
@@ -112,6 +118,7 @@ h2{font-size:15px;margin:20px 0 8px;font-weight:600}
     <button type="button" data-iv="1h" aria-pressed="false">1h</button>
     <button type="button" data-iv="15m" aria-pressed="false">15m</button>
   </div>
+  <button type="button" id="viewToggle" aria-pressed="false" title="Show only symbols meeting the alert rule: previous red + current green + broke previous high, or previous green + current red + broke previous low">View matches (0)</button>
   <button class="primary" id="enableBtn">Enable sound and notifications</button>
   <button id="testBuy" disabled>Test buy sound</button>
   <button id="testSell" disabled>Test sell sound</button>
@@ -123,10 +130,11 @@ h2{font-size:15px;margin:20px 0 8px;font-weight:600}
 <div class="wrap">
 <table>
   <thead><tr>
-    <th>Symbol / Price / Status</th><th id="thPrev">Yesterday (closed)</th><th id="thCur">Today (running)</th><th title="Multi-timeframe score -100..+100 from trend, MACD and RSI (1d, 4h, 1h, 15m). Your support / resistance are not used.">Signal</th><th>Trend</th><th title="OB = 70 or more (overbought), OS = 30 or less (oversold)">RSI (14)</th><th>MACD / Signal (12,26,9)</th><th>Resistance / Support</th>
+    <th>Symbol / Price / Status</th><th id="thPrev">Yesterday (closed)</th><th id="thCur">Today (running)</th><th>Trend</th><th title="OB = 70 or more (overbought), OS = 30 or less (oversold)">RSI (14)</th><th>MACD / Signal (12,26,9)</th><th>Resistance / Support</th>
   </tr></thead>
   <tbody id="rows"></tbody>
 </table>
+<div id="noMatch" hidden>No symbol meets the alert condition right now. Use Show all to see every row.</div>
 </div>
 
 <aside class="side">
@@ -158,7 +166,10 @@ h2{font-size:15px;margin:20px 0 8px;font-weight:600}
 })();
 
 const CFG = {
-  symbols: [  "BTCUSDT","HYPEUSDT", "ZECUSDT","TLMUSDT","APTUSDT","XAUUSDT","NEAR" ],
+  symbols: [ "BTCUSDT","HYPEUSDT","ZECUSDT","TLMUSDT","APTUSDT","XAUUSDT","NEARUSDT",
+           "ETHUSDT","SOLUSDT","BNBUSDT","TRXUSDT","XMRUSDT","BTWUSDT","LSKUSDT",
+           "LINKUSDT","AAVEUSDT","UNIUSDT","XRPUSDT","LTCUSDT","BCHUSDT", "SUIUSDT","TAOUSDT"
+         ],
 
   interval: "1d",          // default; the buttons switch it at runtime
   candleLimit: 2,          // previous closed candle + running candle only (breakout check). RSI / MACD do not use this
@@ -242,11 +253,11 @@ function levelInput(sym, kind, label){
     aria-label="${sym.replace("USDT","")} ${label.toLowerCase()}" value="${v}"></label>`;
 }
 
-/* columns: 0 = symbol / price / status, 1 = previous candle, 2 = current candle, then signal, trend, rsi, macd, levels */
+/* columns: 0 = symbol / price / status, 1 = previous candle, 2 = current candle, then trend, rsi, macd, levels */
 $("rows").innerHTML = CFG.symbols.map(s =>
   `<tr id="r-${s}"><td class="sym"><div>${s.replace("USDT","")}<span class="lv">/USDT</span></div>
    <div class="price">–</div><div class="status"><span class="badge">Loading</span></div></td>
-   <td>–</td><td>–</td><td class="sig"></td><td class="trend"></td><td class="rsi"></td><td class="macd"></td>
+   <td>–</td><td>–</td><td class="trend"></td><td class="rsi"></td><td class="macd"></td>
    <td class="levels">${levelInput(s, "r", "Resistance")}${levelInput(s, "s", "Support")}</td></tr>`
 ).join("");
 
@@ -338,8 +349,8 @@ function alertFor(sym, dir, level, now){
   const name = sym.replace("USDT","");
   const L = IVS[iv];
   const msg = up
-    ? `${name} broke above ${L.p} high ${fmt(level)} (${L.c} high ${fmt(now)})`
-    : `${name} broke below ${L.p} low ${fmt(level)} (${L.c} low ${fmt(now)})`;
+    ? `${name} red → green, broke above ${L.p} high ${fmt(level)} (${L.c} high ${fmt(now)})`
+    : `${name} green → red, broke below ${L.p} low ${fmt(level)} (${L.c} low ${fmt(now)})`;
   notify(sym, up, msg, dir + iv);
 }
 
@@ -363,8 +374,15 @@ function update(sym, d){
   const up = c.h > p.h;
   const dn = c.l < p.l;
 
-  if(up && !s.up){ s.up = true; if(s.seeded) alertFor(sym, "up", p.h, c.h); }
-  if(dn && !s.down){ s.down = true; if(s.seeded) alertFor(sym, "down", p.l, c.l); }
+  /* candle alerts, two cases only (green = close >= open, same as the table):
+     breakup   = previous candle red + current candle green + current high above previous high
+     breakdown = previous candle green + current candle red + current low below previous low
+     each fires once per candle; the first load and an interval switch stay silent */
+  const upM = p.c < p.o && c.c >= c.o && up;
+  const dnM = p.c >= p.o && c.c < c.o && dn;
+
+  if(upM && !s.up){ s.up = true; if(s.seeded) alertFor(sym, "up", p.h, c.h); }
+  if(dnM && !s.down){ s.down = true; if(s.seeded) alertFor(sym, "down", p.l, c.l); }
   s.seeded = true;
 
   /* support / resistance: fire once per crossing; null = not yet seeded, so no alert */
@@ -382,11 +400,14 @@ function update(sym, d){
     s.belowS = below;
   } else s.belowS = null;
 
-  const label = up && dn ? ["both","Broke both ▲▼"] : up ? ["up","Broke high ▲"] : dn ? ["dn","Broke low ▼"] : ["","Inside " + IVS[iv].p + " range"];
+  const label = upM ? ["up strong","Breakup ▲"] : dnM ? ["dn strong","Breakdown ▼"] : up && dn ? ["both","Broke both ▲▼"] : up ? ["up","Broke high ▲"] : dn ? ["dn","Broke low ▼"] : ["","Inside " + IVS[iv].p + " range"];
 
   row.querySelector(".price").textContent = fmt(c.c);
   row.children[1].innerHTML = candleCell(p, false, false);
   row.children[2].innerHTML = candleCell(c, up, dn);
+  row.classList.toggle("m-up", upM);
+  row.classList.toggle("m-dn", dnM);
+  refreshView();
   row.querySelector(".status").innerHTML = `<span class="badge ${label[0]}">${label[1]}</span>`;
   styleLevels(sym);
 }
@@ -493,7 +514,6 @@ function drawInds(sym){
     const up = m.hist >= 0;
     return `<div class="lab ${up ? "g" : "r"}" title="MACD ${num(m.macd)} · Signal ${num(m.sig)} · Histogram ${num(m.hist)}"><span class="lv">${i}</span><span>${num(m.macd)} / ${num(m.sig)} ${up ? "▲" : "▼"}</span></div>`;
   }).join("");
-  computeSignal(sym);
 }
 
 /* between history refreshes, put the live price into the running candle so RSI / MACD follow the exchange chart */
@@ -508,66 +528,6 @@ function liveInds(sym, price){
     x.rsi = rsi(cl, CFG.rsiLen); x.macd = macd(cl);
   }
   drawInds(sym);
-}
-
-/* signal engine: score -100..+100 from trend (ADX), MACD and RSI on 1d / 4h / 1h / 15m.
-   Your support / resistance inputs are NOT used. 1d sets the bias, 15m is the early trigger. */
-const SIG = {
-  buy: 55, sell: -55, strong: 75, exit: 30,   // fire at +/-55, "strong" at +/-75, back to neutral inside +/-30
-  cooldownMs: 36e5,                            // same symbol + same direction: once per hour
-  w: { "1d":[15,8,0], "4h":[12,8,6], "1h":[8,8,6], "15m":[5,6,8] }   // [trend, macd, rsi] points
-};
-const sigs = {};
-function computeSignal(sym){
-  const o = inds[sym] || {}, t = trends[sym] || {}, cell = $("r-" + sym).querySelector(".sig");
-  let sc = 0, max = 0, ready = true;
-  const why = [];
-  for(const i of CFG.trendIntervals){
-    const [wt, wm, wr] = SIG.w[i], x = o[i], tr = t[i];
-    max += wt + wm + wr;
-    if(!x || !x.macd || x.rsi == null){ ready = false; continue; }
-    let a = 0;
-    if(tr && tr.t === "up") a += wt; else if(tr && tr.t === "down") a -= wt;
-    a += x.macd.hist >= 0 ? wm : -wm;
-    if(wr){ if(x.rsi > 50 && x.rsi < 70) a += wr; else if(x.rsi < 50 && x.rsi > 30) a -= wr; }
-    sc += a;
-    why.push(`${i}: ${tr ? TL[tr.t][1] : "–"}, MACD ${x.macd.hist >= 0 ? "▲" : "▼"}, RSI ${x.rsi.toFixed(0)} (${a > 0 ? "+" : ""}${a})`);
-  }
-  if(!ready){ cell.innerHTML = `<span class="badge">Loading</span>`; return; }
-
-  let score = sc / max * 100, notes = [];
-  const d1 = t["1d"], h4 = t["4h"];
-  if(d1 && h4 && d1.t === "side" && h4.t === "side"){ score *= .5; notes.push("sideways"); }
-  if(d1 && ((d1.t === "up" && score < 0) || (d1.t === "down" && score > 0))){ score *= .6; notes.push("counter-trend"); }
-  score = Math.round(score);
-
-  const s = sigs[sym] || (sigs[sym] = { state: 0, last: {}, seeded: false });
-  const m15 = o["15m"].macd.hist;                       // early trigger: 15m MACD must agree
-  let st = s.state;
-  if(score >= SIG.buy && m15 >= 0) st = 1;
-  else if(score <= SIG.sell && m15 < 0) st = -1;
-  else if((st === 1 && score < SIG.exit) || (st === -1 && score > -SIG.exit)) st = 0;
-
-  const hot = [o["1h"].rsi, o["15m"].rsi];
-  if(st === 1 && hot.some(r => r >= 70)) notes.push("late entry, RSI hot");
-  if(st === -1 && hot.some(r => r <= 30)) notes.push("late entry, RSI low");
-  const strong = Math.abs(score) >= SIG.strong;
-  const px = o["15m"].cl[o["15m"].cl.length - 1];
-
-  if(st !== s.state){
-    s.state = st;
-    if(st !== 0 && s.seeded && Date.now() - (s.last[st] || 0) > SIG.cooldownMs){
-      s.last[st] = Date.now();
-      const name = sym.replace("USDT", "");
-      notify(sym, st > 0, `${name} ${strong ? "STRONG " : ""}${st > 0 ? "BUY" : "SELL"} signal ${score > 0 ? "+" : ""}${score} · price ${fmt(px)}${notes.length ? " · " + notes.join(", ") : ""}`, "sig" + st);
-    }
-  }
-  s.seeded = true;
-
-  const cls = st > 0 ? "up" : st < 0 ? "dn" : "";
-  const word = st > 0 ? (strong ? "Strong BUY" : "BUY") : st < 0 ? (strong ? "Strong SELL" : "SELL") : "Neutral";
-  cell.innerHTML = `<span class="badge ${cls}${strong && st ? " strong" : ""}" title="${esc(why.join("\n"))}">${word} ${score > 0 ? "+" : ""}${score}</span>` +
-    (notes.length ? `<div class="sigsub">${esc(notes.join(" · "))}</div>` : "");
 }
 
 const trends = {};
@@ -618,6 +578,20 @@ $("enableBtn").addEventListener("click", async () => {
 $("testBuy").addEventListener("click", () => play("buySound"));
 $("testSell").addEventListener("click", () => play("sellSound"));
 
+/* view matches / show all: rows meeting the alert rule carry m-up or m-dn, the filter only hides the rest */
+function refreshView(){
+  const n = document.querySelectorAll("#rows tr.m-up, #rows tr.m-dn").length;
+  const on = document.body.classList.contains("only-match");
+  const b = $("viewToggle");
+  b.setAttribute("aria-pressed", String(on));
+  b.textContent = on ? "Show all" : `View matches (${n})`;
+  $("noMatch").hidden = !(on && n === 0);
+}
+$("viewToggle").addEventListener("click", () => {
+  document.body.classList.toggle("only-match");
+  refreshView();
+});
+
 function applyIv(){
   const L = IVS[iv];
   $("thPrev").textContent = `${L.prev} (closed)`;
@@ -635,12 +609,13 @@ function setIv(next){
   st.textContent = `Loading ${iv}…`;
   CFG.symbols.forEach(sym => {
     const row = $("r-" + sym);
-    row.classList.remove("flash-up", "flash-dn");
+    row.classList.remove("flash-up", "flash-dn", "m-up", "m-dn");
     row.querySelector(".price").textContent = "–";
     row.children[1].textContent = row.children[2].textContent = "–";
     row.querySelector(".status").innerHTML = `<span class="badge">Loading</span>`;
     styleLevels(sym);
   });
+  refreshView();
   poll();
 }
 $("intervals").addEventListener("click", e => {
