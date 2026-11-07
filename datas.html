@@ -137,7 +137,33 @@ h2{font-size:15px;margin:20px 0 8px;font-weight:600}
 
 <script>
 const CFG = {
-  symbols: ["BTCUSDT","HYPEUSDT","ZECUSDT","TLMUSDT","APTUSDT","XAUUSDT","NEARUSDT","ETHUSDT","SOLUSDT","BNBUSDT","TRXUSDT","XMRUSDT","BTWUSDT","LSKUSDT","LINKUSDT","AAVEUSDT","UNIUSDT","XRPUSDT","LTCUSDT","BCHUSDT","SUIUSDT","TAOUSDT"],
+  const symbols = [
+  "BTCUSDT",
+  "HYPEUSDT",
+  "ZECUSDT",
+  "NEARUSDT",
+  "ETHUSDT",
+  "SOLUSDT",
+  "BNBUSDT",
+  "TRXUSDT",
+  "XMRUSDT",
+  "BTWUSDT",
+  "LSKUSDT",
+  "LINKUSDT",
+  "AAVEUSDT",
+  "UNIUSDT",
+  "XRPUSDT",
+  "LTCUSDT",
+  "BCHUSDT",
+  "SUIUSDT",
+  "TAOUSDT",
+  "ADAUSDT",
+  "AVAXUSDT",
+  "DOTUSDT",
+  "ETCUSDT",
+  "FILUSDT",
+  "XLMUSDT"
+];
   interval: "1d",
   chart: "https://www.tradingview.com/chart/uEMj43E3/?symbol=BINANCE%3A",   // + SYMBOL.P (perpetual), opened in a new tab
   ws: "wss://fstream.binance.com/market/stream",   // live price: one 1m kline stream per symbol, nothing else
