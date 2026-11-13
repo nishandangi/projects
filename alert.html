@@ -70,6 +70,8 @@ td.sym .status{font-weight:400}
 .pos{color:var(--up)}.neg{color:var(--dn)}
 .badge.strong{font-weight:700;background:rgba(255,255,255,.06)}
 #viewToggle[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+#modeToggle[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+#rows tr.off{display:none}
 body.only-match #rows tr:not(.m-up):not(.m-dn){display:none}
 tr.m-up td.sym{box-shadow:inset 3px 0 0 var(--up)}
 tr.m-dn td.sym{box-shadow:inset 3px 0 0 var(--dn)}
@@ -123,6 +125,7 @@ h2{font-size:15px;margin:20px 0 8px;font-weight:600}
     <button type="button" data-iv="15m" aria-pressed="false">15m</button>
   </div>
   <select id="tz" aria-label="Time zone" title="Time zone: candles open at midnight of this zone, and all times are shown in it"></select>
+  <button type="button" id="modeToggle" aria-pressed="true" title="Switch between Focus (5 symbols) and All symbols. In Focus mode, alerts and sounds fire only for the focus symbols">Focus mode</button>
   <button type="button" id="viewToggle" aria-pressed="false" title="Show only symbols whose running candle broke the previous high or low (active buy / sell alert)">View matches (0)</button>
   <button class="primary" id="enableBtn">Enable sound and notifications</button>
   <button id="testBuy" disabled>Test buy sound</button>
@@ -149,6 +152,7 @@ h2{font-size:15px;margin:20px 0 8px;font-weight:600}
 
 <script>
 const CFG = {
+ /* ALL mode: every symbol is loaded and streamed (rows are only hidden in Focus mode) */
  symbols:[
   "BTCUSDT",
   "HYPEUSDT",
@@ -175,7 +179,15 @@ const CFG = {
   "ETCUSDT",
   "FILUSDT",
   "XLMUSDT"
-],
+ ],
+ /* FOCUS mode (default): only these rows are shown, and only these fire alerts / sounds. Must also be listed in symbols above */
+ focus:[
+  "BTCUSDT",
+  "HYPEUSDT",
+  "ZECUSDT",
+  "ETHUSDT",
+  "SOLUSDT"
+ ],
   interval: "1d",
   chart: "https://www.tradingview.com/chart/uEMj43E3/?symbol=BINANCE%3A",   // + SYMBOL.P (perpetual), opened in a new tab
   ws: "wss://fstream.binance.com/market/stream",   // live price: one 1m kline stream per symbol, nothing else
@@ -210,9 +222,14 @@ const MS = { "1d":864e5, "4h":144e5, "1h":36e5, "15m":9e5 };
 const $ = id => document.getElementById(id);
 const ST = {};
 let soundOn = false, iv = IVS[CFG.interval] ? CFG.interval : "1d", tz = TZS[0];
-const TZK = "candle.tz.v1", LVK = "candle.levels.v1", LOGK = "candle.alerts.v1", LOG_MAX = 50;
+const TZK = "candle.tz.v1", LVK = "candle.levels.v1", LOGK = "candle.alerts.v1", MODEK = "candle.mode.v1", LOG_MAX = 50;
 try{ tz = TZS.find(z => z.id === localStorage.getItem(TZK)) || TZS[0]; }catch(e){}
 const off = () => tz.off * 6e4;
+
+/* ---------- focus / all mode (focus is the default) ---------- */
+let mode = "focus";
+try{ if(localStorage.getItem(MODEK) === "all") mode = "all"; }catch(e){}
+const inMode = sym => mode === "all" || CFG.focus.includes(sym);
 
 let levels = {};
 try{ levels = JSON.parse(localStorage.getItem(LVK)) || {}; }catch(e){ levels = {}; }
@@ -262,7 +279,7 @@ const newState = () => ({ b:{}, c:{}, ind:{}, tr:{}, price:null, up:false, down:
   upAt:null, dnAt:null, bf:false, buyM:false, sellM:false, sig:"", drawn:0, li:0, bad:false });
 CFG.symbols.forEach(s => ST[s] = newState());
 $("rows").innerHTML = CFG.symbols.map(s =>
-  `<tr id="r-${s}"><td class="sym"><div><a href="${CFG.chart}${s}.P" target="_blank" rel="noopener noreferrer" title="Open ${s}.P on TradingView">${s.replace("USDT","")}<span class="lv">/USDT</span></a></div>
+  `<tr id="r-${s}"${inMode(s) ? "" : ' class="off"'}><td class="sym"><div><a href="${CFG.chart}${s}.P" target="_blank" rel="noopener noreferrer" title="Open ${s}.P on TradingView">${s.replace("USDT","")}<span class="lv">/USDT</span></a></div>
    <div class="price">–</div><div class="status"><span class="badge">Loading</span></div></td>
    <td>–</td><td>–</td><td class="trend"></td><td class="rsi"></td><td class="macd"></td>
    <td class="levels">${levelInput(s,"r","Resistance")}${levelInput(s,"s","Support")}</td></tr>`
@@ -455,6 +472,7 @@ function play(id){
   const a = $(id); a.currentTime = 0; a.play().catch(() => {});
 }
 function notify(sym, side, msg, tag, title){
+  if(!inMode(sym)) return;                 // focus mode: only the focus symbols alert
   const buy = side === "buy";
   play(buy ? "buySound" : "sellSound");
   const row = $("r-" + sym);
@@ -688,13 +706,27 @@ $("testBuy").addEventListener("click", () => play("buySound"));
 $("testSell").addEventListener("click", () => play("sellSound"));
 
 function refreshView(){
-  const n = document.querySelectorAll("#rows tr.m-up, #rows tr.m-dn").length;
+  const n = document.querySelectorAll("#rows tr:not(.off).m-up, #rows tr:not(.off).m-dn").length;
   const on = document.body.classList.contains("only-match"), b = $("viewToggle");
   b.setAttribute("aria-pressed", String(on));
   b.textContent = on ? "Show all" : `View matches (${n})`;
   $("noMatch").hidden = !(on && n === 0);
 }
 $("viewToggle").addEventListener("click", () => { document.body.classList.toggle("only-match"); refreshView(); });
+
+/* focus / all: rows are only shown or hidden, every symbol keeps streaming, so switching is instant */
+function applyMode(){
+  CFG.symbols.forEach(s => $("r-" + s).classList.toggle("off", !inMode(s)));
+  const b = $("modeToggle");
+  b.setAttribute("aria-pressed", String(mode === "focus"));
+  b.textContent = mode === "focus" ? `Focus mode (${CFG.focus.length})` : `All mode (${CFG.symbols.length})`;
+  refreshView();
+}
+$("modeToggle").addEventListener("click", () => {
+  mode = mode === "focus" ? "all" : "focus";
+  try{ localStorage.setItem(MODEK, mode); }catch(e){}
+  applyMode();
+});
 
 function applyIv(){
   const L = IVS[iv];
@@ -745,6 +777,7 @@ function setState(){
 setInterval(setState, 1000);
 
 applyIv();
+applyMode();
 CFG.symbols.forEach(s => inds(s, true));
 connect();
 start();
